@@ -1,0 +1,6 @@
+*.pdf
+*.zip
+
+ckpt
+collected_data
+*.pyc
