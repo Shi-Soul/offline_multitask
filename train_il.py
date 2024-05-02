@@ -120,11 +120,11 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
     momentum = 0.9
     batch_size = 1024
     test_size = 0.2
-    random_noise = 0.1
+    random_noise = 0.02
     
     
     data = make_dataset()
-    merge_data = merge_dataset(data['run_mr'],data['walk_mr'])
+    merge_data = merge_dataset(data['run_m'],data['walk_m'])
     # merge_data = merge_dataset(*data.values())
     # merge_data = merge_dataset(data['run_m'], data['run_mr'])
     if TRAIN_TEST_SPLIT:
