@@ -1,6 +1,8 @@
 import dmc
 import glob
 import numpy as np
+import jax
+from jax import numpy as jnp
 
 OBS_DIM = 24
 ACT_DIM = 6
@@ -9,12 +11,16 @@ WALK_BIT = 0
 
 
 class DataLoader:
-    def __init__(self, data:dict, batch_size=32, random_noise=-1):
+    def __init__(self, data:dict, batch_size=32, random_noise=-1, device=None):
         self.data = data
+        for key in self.data.keys():
+            self.data[key] = jax.device_put(jnp.array(data[key]), device=device)
         self.data_len = len(data['obs'])
         self.batch_size = batch_size
         self.idx = 0
         self.random_noise = -1
+        
+        self.device = device
             # -1 (or other negative) for no noise
             # 0.01 for 1% noise
         self.__shuffle()

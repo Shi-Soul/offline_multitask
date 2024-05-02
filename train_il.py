@@ -10,9 +10,14 @@ import optax                           # Common loss functions and optimizers
 import numpy as np
 from functools import partial
 import fire
+import time
 from util import *
+import os
 
 SEED=1
+PWD = os.path.dirname(os.path.abspath(__file__))
+device = jax.devices("gpu")[0]
+assert device.platform=="gpu"
 
 class MLPAgent:
     # An example of the agent to be implemented.
@@ -31,6 +36,7 @@ class MLPAgent:
         assert state.shape == (self.state_dim,)
         state = np.concatenate([state, np.ones((1))*self.task_bit], axis=0).reshape(1, -1)
         # action = np.random.uniform(-5, 5, size=(self.action_dim))
+        state = jax.device_put(state, device)
         action = self.modelstate.apply_fn({'params': self.modelstate.params}, state)
         return np.array(action[0])
     
@@ -49,15 +55,15 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.relu(nn.Dense(32)(x))
         x = nn.silu(nn.Dense(256)(x))
         x = nn.LayerNorm()(x)
+        x = nn.silu(nn.Dense(256)(x))+x
+        # x = nn.LayerNorm()(x)
+        # x = nn.silu(nn.Dense(256)(x))+x
+        x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(64)(x))
         x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(64)(x))+x
         x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(16)(x))
-        x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(16)(x))+x
-        x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(16)(x))+x
+        x = nn.silu(nn.Dense(64)(x))+x
         x = nn.LayerNorm()(x)
         x = nn.Dense(self.out_dims)(x)       # shape inference
         return x
@@ -109,12 +115,12 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
 
-    num_epochs = 50 
+    num_epochs = 100
     learning_rate = 0.002
     momentum = 0.9
-    batch_size = 128
+    batch_size = 1024
     test_size = 0.2
-    random_noise = 0.01
+    random_noise = 0.1
     
     
     data = make_dataset()
@@ -134,6 +140,7 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
     model = MLP(ACT_DIM)
     print(model.tabulate(init_rng, jnp.ones([1, OBS_DIM+1]),compute_flops=True))
     state = create_train_state(model, init_rng, learning_rate, momentum)
+    state = jax.device_put(state, device)
     del init_rng  # Must not be used anymore.
     
 
@@ -163,7 +170,7 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
                 f"\tloss: {metrics_history['test_loss']}, ")
         
     # Save the model
-    checkpoints.save_checkpoint(ckpt_dir='E:\MyFiles\Course\RL\proj\ckpt',
+    checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt'),
                             target=state,
                             step=0,
                             overwrite=True,
@@ -191,7 +198,8 @@ def test():
     
     model = MLP(ACT_DIM)
     state = create_train_state(model, init_rng, learning_rate, momentum)
-    state = checkpoints.restore_checkpoint(ckpt_dir='E:\MyFiles\Course\RL\proj\ckpt', target=state)
+    state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt'), target=state)
+    state = jax.device_put(state, device)
     # inference
     # act = state.apply_fn({'params': state.params}, batch['obs'])
     agent = MLPAgent(state, OBS_DIM, ACT_DIM)
@@ -200,10 +208,13 @@ def test():
         
 if __name__=="__main__":
     try:
+        start_time = time.time()
         fire.Fire({
             'train': main,
             'test': test
         })
+        end_time = time.time()
+        print("Program Running time: ", end_time-start_time)
     except Exception as e:
         print(">>BUG: ",e)
         import pdb;pdb.post_mortem()
