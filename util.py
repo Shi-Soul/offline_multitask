@@ -18,7 +18,7 @@ class DataLoader:
         self.data_len = len(data['obs'])
         self.batch_size = batch_size
         self.idx = 0
-        self.random_noise = -1
+        self.random_noise = random_noise
         
         self.device = device
             # -1 (or other negative) for no noise
@@ -87,9 +87,10 @@ def make_dataset():
     def reorganize(dataset, bit):
         obs = np.concatenate([traj['observation'] for traj in dataset], axis=0)
         act = np.concatenate([traj['action'] for traj in dataset], axis=0)
+        rew = np.concatenate([traj['reward'] for traj in dataset], axis=0)
         phy = np.concatenate([traj['physics'] for traj in dataset], axis=0)
         obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
-        return {'obs': obs, 'act': act, 'phy': phy}
+        return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy}
     
     run_m_data = reorganize(run_m, RUN_BIT)
     run_mr_data = reorganize(run_mr, RUN_BIT)
@@ -112,6 +113,8 @@ def merge_dataset(*args):
         ret[key] = np.concatenate([dataset[key] for dataset in args], axis=0)
     return ret
 
+
+
 def train_test_split(data, test_size=0.2):
     n = data['obs'].shape[0]
     idx = np.random.permutation(n)
@@ -123,6 +126,8 @@ def train_test_split(data, test_size=0.2):
         train_data[key] = data[key][idx[:n_train]]
         test_data[key] = data[key][idx[n_train:]]
     return train_data, test_data
+
+
 
 def eval_agent(agent, eval_episodes=100,seed=1):
 # Agent(24, 6)
