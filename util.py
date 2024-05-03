@@ -85,20 +85,36 @@ def make_dataset(MAKE_SARSA=False):
     
     # Reorganize them to batched dataset
     def reorganize(dataset, bit):
+        print("Mean Cumulative reward: ", np.mean([np.sum(traj['reward']) for traj in dataset]))
+
+            
+            
         obs = np.concatenate([traj['observation'] for traj in dataset], axis=0)
         act = np.concatenate([traj['action'] for traj in dataset], axis=0)
         rew = np.concatenate([traj['reward'] for traj in dataset], axis=0)
         phy = np.concatenate([traj['physics'] for traj in dataset], axis=0)
         obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
+        dones = np.zeros_like(rew)
+        dones[-1] = 1
         if not MAKE_SARSA:
-            return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy}
+            return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy, 'dones':dones}
         else:
-            # FIXME:
-            # Here we pad the last obs and act with zeros
-            #   which may not be the best way to handle the last obs and act
-            obs_prime = np.concatenate([obs[1:], np.zeros_like(obs[:1])], axis=0)
-            act_prime = np.concatenate([act[1:], np.zeros_like(act[:1])], axis=0)
-            return {'obs': obs, 'act': act, 'rew':rew, 
+        #     # FIXME:
+        #     # Here we pad the last obs and act with zeros
+        #     #   which may not be the best way to handle the last obs and act
+            obs_prime = np.concatenate([ 
+                                        np.concatenate([traj['observation'][1:], 
+                                            np.zeros_like(traj['observation'][:1])]
+                                                    ,axis=0) for traj in dataset], axis=0)
+            act_prime = np.concatenate([ 
+                                        np.concatenate([traj['action'][1:], 
+                                            np.zeros_like(traj['action'][:1])]
+                                                    ,axis=0) for traj in dataset], axis=0)
+            obs_prime = np.concatenate([obs_prime, np.ones((obs_prime.shape[0],1))*bit], axis=1)
+            
+        #     obs_prime = np.concatenate([obs[1:], np.zeros_like(obs[:1])], axis=0)
+        #     act_prime = np.concatenate([act[1:], np.zeros_like(act[:1])], axis=0)
+            return {'obs': obs, 'act': act, 'rew':rew, 'dones':dones,
                     'obs_prime': obs_prime, 'act_prime': act_prime}
     
     run_m_data = reorganize(run_m, RUN_BIT)

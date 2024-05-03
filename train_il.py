@@ -200,7 +200,7 @@ def test():
     
     model = MLP(ACT_DIM)
     state = create_train_state(model, init_rng, learning_rate, momentum)
-    state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt'), target=state)
+    state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','il'), target=state)
     state = jax.device_put(state, device)
     # inference
     # act = state.apply_fn({'params': state.params}, batch['obs'])
