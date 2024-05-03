@@ -95,7 +95,13 @@ class SAC(nn.Module):
         return jnp.sum(-0.5 * jnp.log(2 * jnp.pi) - log_std - 0.5 * jnp.square((act - mu) / std), axis=-1)
 
     def actor_loss(self, x, rng):
-        q, mu, log_std = self(x, rng)
+        # q, mu, log_std = self(x, rng)
+        mu,log_std = self.actor(x)
+        act = self.reparameterize(mu, log_std, rng)
+        # q = self.critic1(x, act)
+        q = self.critic1.apply({
+            'params': jax.lax.stop_gradient(self.critic1.variables['params'])}, 
+                               x, act)
         log_pi = self.log_pi(mu, log_std, mu)
         return (-q + log_pi).mean()
     
@@ -105,9 +111,10 @@ class SAC(nn.Module):
         q1 = self.critic1(s, a)
         q_prime = self.critic1(s_prime, a_prime)
         td_target = r + self.gamma * q_prime
-        td_loss = optax.l2_loss(q1, td_target).mean()
+        td_loss = optax.l2_loss(q1, jax.lax.stop_gradient(td_target)).mean()
         
         mu,logstd = self.actor(s)
+        mu,logstd = jax.lax.stop_gradient(mu), jax.lax.stop_gradient(logstd)
         # sample action from current policy and uniform random
         replicate_mu = jnp.repeat(mu, self.num_act_samples, axis=0)
         replicate_logstd = jnp.repeat(logstd, self.num_act_samples, axis=0)
@@ -125,13 +132,19 @@ class SAC(nn.Module):
     def compute_loss(self, s, a, r, s_prime, a_prime, rng):
         rng1, rng2 = random.split(rng)
         actor_loss = self.actor_loss(s, rng1)
-        critic_loss = self.critic_loss(s, a, r, s_prime, a_prime, rng2)
-        return actor_loss + critic_loss
+        critic_loss= self.critic_loss(s, a, r, s_prime, a_prime, rng2)
+        
+        # jax.debug.print("Actor loss {actor_loss}",actor_loss=actor_loss)
+        # jax.debug.print("Critic loss {critic_loss}",critic_loss=critic_loss)
+        return actor_loss, critic_loss
+        # return actor_loss + critic_loss
 
 @struct.dataclass
 class Metrics(metrics.Collection):
     # accuracy: metrics.Accuracy
-    loss: metrics.Average.from_output('loss')    
+    loss: metrics.Average.from_output('loss') 
+    actor_loss: metrics.Average.from_output('actor_loss') 
+    critic_loss: metrics.Average.from_output('critic_loss')    
     
 class TrainState(train_state.TrainState):
     
@@ -153,13 +166,16 @@ def train_step(state, batch,rng):
         # pred = state.apply_fn({'params': params}, batch['obs'])
         # loss = optax.l2_loss(pred, batch['act']).mean()
         loss = state.apply_fn({'params':params},batch['obs'], batch['act'], batch['rew'], batch['obs_prime'], batch['act_prime'], rng,method='compute_loss')
-        return loss
-    # grad_fn = jax.grad(loss_fn)
-    # grads = grad_fn(state.params)
-    loss,grads = jax.value_and_grad(loss_fn)(state.params)
+        return loss[0]+loss[1]*10  , (loss[0], loss[1])
+    (loss, (actor_loss,critic_loss)),grads = jax.value_and_grad(loss_fn,has_aux=True)(state.params)
+    # jax.debug.print("Total loss {loss}",loss=loss)
     state = state.apply_gradients(grads=grads)
-    # state.metrics = state.metrics.merge(Metrics.from_model_output(loss=loss))
-    state = state.replace(metrics=state.metrics.merge(Metrics.from_model_output(loss=loss)))
+    state = state.replace(metrics=state.metrics.merge(
+        Metrics.single_from_model_output(
+            loss=loss,
+            actor_loss = actor_loss,
+            critic_loss = critic_loss
+                                         )))
     return state
 
 def train(SAMPLE_EXAMPLE=False,):
@@ -167,7 +183,7 @@ def train(SAMPLE_EXAMPLE=False,):
     init_rng = jax.random.key(SEED)
     init_rng, rng1, rng2, rng3 = random.split(init_rng, 4)
 
-    num_epochs = 100
+    num_epochs = 20
     learning_rate = 0.002
     momentum = 0.9
     batch_size = 512
@@ -184,7 +200,7 @@ def train(SAMPLE_EXAMPLE=False,):
     state = create_train_state(model, rng2, learning_rate, momentum)
     state = jax.device_put(state, device)
     
-    metrics_history = {'train_loss': []}
+    metrics_history = {'train_loss': [], 'train_actor_loss': [], 'train_critic_loss': []}
     
     for epoch in range(num_epochs):
         
@@ -197,8 +213,12 @@ def train(SAMPLE_EXAMPLE=False,):
         
         state = state.replace(metrics=state.metrics.empty()) 
         
+        # print(f"train epoch\t: {epoch}, "
+        #     f"\tloss: {metrics_history['train_loss'][-1]}, ")
         print(f"train epoch\t: {epoch}, "
-            f"\tloss: {metrics_history['train_loss'][-1]}, ")
+            f"\tloss: {metrics_history['train_loss'][-1]}, \t"
+            f"\tactor_loss: {metrics_history['train_actor_loss'][-1]}, "
+            f"\tcritic_loss: {metrics_history['train_critic_loss'][-1]}")
         
     checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','cql'),
                             target=state,
