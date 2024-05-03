@@ -69,7 +69,7 @@ def load_data(data_path):
     # print([(key, val.shape) for key,val in episodes[0].items()])
     return episodes
 
-def make_dataset():
+def make_dataset(MAKE_SARSA=False):
     
     run_m = load_data("collected_data/walker_run-td3-medium/data")
     run_mr = load_data("collected_data/walker_run-td3-medium-replay/data")
@@ -90,14 +90,24 @@ def make_dataset():
         rew = np.concatenate([traj['reward'] for traj in dataset], axis=0)
         phy = np.concatenate([traj['physics'] for traj in dataset], axis=0)
         obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
-        return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy}
+        if not MAKE_SARSA:
+            return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy}
+        else:
+            # FIXME:
+            # Here we pad the last obs and act with zeros
+            #   which may not be the best way to handle the last obs and act
+            obs_prime = np.concatenate([obs[1:], np.zeros_like(obs[:1])], axis=0)
+            act_prime = np.concatenate([act[1:], np.zeros_like(act[:1])], axis=0)
+            return {'obs': obs, 'act': act, 'rew':rew, 
+                    'obs_prime': obs_prime, 'act_prime': act_prime}
     
     run_m_data = reorganize(run_m, RUN_BIT)
     run_mr_data = reorganize(run_mr, RUN_BIT)
     walk_m_data = reorganize(walk_m, WALK_BIT)
     walk_mr_data = reorganize(walk_mr, WALK_BIT)
     
-    print( run_m_data['obs'].shape, run_m_data['act'].shape, run_m_data['phy'].shape)
+    # print( run_m_data['obs'].shape, run_m_data['act'].shape, run_m_data['phy'].shape)
+    print([value.shape for value in run_m_data.values()])
     return {
         'run_m': run_m_data,
         'run_mr': run_mr_data,

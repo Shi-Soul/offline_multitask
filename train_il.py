@@ -66,6 +66,7 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.silu(nn.Dense(64)(x))+x
         # x = nn.LayerNorm()(x)
         x = nn.Dense(self.out_dims)(x)       # shape inference
+        x = nn.tanh(x)
         return x
 
 @struct.dataclass
@@ -171,7 +172,7 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
                 f"\tloss: {metrics_history['test_loss']}, ")
         
     # Save the model
-    checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt'),
+    checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','il'),
                             target=state,
                             step=0,
                             overwrite=True,
