@@ -115,8 +115,9 @@ class SAC(nn.Module):
         policy_act = self.reparameterize(replicate_mu, replicate_logstd, rng1)
         policy_random = random.uniform(rng2, shape=policy_act.shape, minval=-1, maxval=1)
         
-        q_policy = self.critic1(s, policy_act)
-        q_random = self.critic1(s, policy_random)
+        replicate_s = jnp.repeat(s, self.num_act_samples, axis=0)
+        q_policy = self.critic1(replicate_s, policy_act)
+        q_random = self.critic1(replicate_s, policy_random)
         min_q_loss = (q_policy - q_random).mean()
         
         return td_loss + min_q_loss*self.min_q_weight
@@ -169,7 +170,7 @@ def train(SAMPLE_EXAMPLE=False,):
     num_epochs = 100
     learning_rate = 0.002
     momentum = 0.9
-    batch_size = 1024
+    batch_size = 512
     test_size = 0.2
     
     data = make_dataset(MAKE_SARSA=True)
