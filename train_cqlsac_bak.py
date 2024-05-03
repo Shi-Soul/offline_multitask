@@ -1,3 +1,4 @@
+from typing import Any, Callable, Union
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -13,6 +14,7 @@ import fire
 import time
 from util import *
 import os
+import functools
 
 SEED=1
 PWD = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +43,16 @@ class CQLSACAgent:
     def load(self, load_path):
         pass
 
+
+def reparameterize(mu, log_std, rng):
+    std = jnp.exp(log_std)
+    return mu + std * random.normal(rng, mu.shape)
+
+def log_pi(mu, log_std, act):
+    std = jnp.exp(log_std)
+    return jnp.sum(-0.5 * jnp.log(2 * jnp.pi) - log_std - 0.5 * jnp.square((act - mu) / std), axis=-1)
+
+
 class Actor(nn.Module):
     act_dims: int
     @nn.compact
@@ -51,9 +63,7 @@ class Actor(nn.Module):
         x = nn.silu(nn.Dense(256)(x))+x
         x = nn.Dense(self.act_dims*2)(x)
         # mu and log_std
-        mu,log_std = jnp.split(x.reshape(-1, self.act_dims, 2),2, axis=-1)
-        return mu,log_std
-
+        return x
     
 class Critic(nn.Module):
     @nn.compact
@@ -68,11 +78,7 @@ class Critic(nn.Module):
         return x
     
 class SAC(nn.Module):
-    obs_dims: int
     act_dims: int
-    gamma: float
-    min_q_weight: float
-    num_act_samples: int
     
     def setup(self):
         self.actor = Actor(act_dims=self.act_dims)
@@ -80,52 +86,13 @@ class SAC(nn.Module):
         # self.critic2 = Critic()
         
     def __call__(self, x, rng):
-        # mu,log_std = jnp.split(self.actor(x).reshape(-1, self.act_dims, 2),2, axis=-1)
-        mu,log_std = self.actor(x)
-        act = self.reparameterize(mu, log_std, rng)
+        mu,log_std = jnp.split(self.actor(x).reshape(-1, self.act_dims, 2), 2, axis=-1)
+        act = reparameterize(mu, log_std, rng)
         q = self.critic1(x, act)
         return q, mu, log_std
-    
-    def reparameterize(self, mu, log_std, rng):
-        std = jnp.exp(log_std)
-        return mu + std * random.normal(rng, mu.shape)
 
-    def log_pi(self, mu, log_std, act):
-        std = jnp.exp(log_std)
-        return jnp.sum(-0.5 * jnp.log(2 * jnp.pi) - log_std - 0.5 * jnp.square((act - mu) / std), axis=-1)
 
-    def actor_loss(self, x, rng):
-        q, mu, log_std = self(x, rng)
-        log_pi = self.log_pi(mu, log_std, mu)
-        return (-q + log_pi).mean()
-    
-    def critic_loss(self, s, a, r, s_prime, a_prime, rng):
-        rng1, rng2 = random.split(rng)
-        
-        q1 = self.critic1(s, a)
-        q_prime = self.critic1(s_prime, a_prime)
-        td_target = r + self.gamma * q_prime
-        td_loss = optax.l2_loss(q1, td_target).mean()
-        
-        mu,logstd = self.actor(s)
-        # sample action from current policy and uniform random
-        replicate_mu = jnp.repeat(mu, self.num_act_samples, axis=0)
-        replicate_logstd = jnp.repeat(logstd, self.num_act_samples, axis=0)
-        # shape: (batch_size*num_act_samples, act_dim)
-        policy_act = self.reparameterize(replicate_mu, replicate_logstd, rng1)
-        policy_random = random.uniform(rng2, shape=policy_act.shape, minval=-1, maxval=1)
-        
-        q_policy = self.critic1(s, policy_act)
-        q_random = self.critic1(s, policy_random)
-        min_q_loss = (q_policy - q_random).mean()
-        
-        return td_loss + min_q_loss*self.min_q_weight
-    
-    def compute_loss(self, s, a, r, s_prime, a_prime, rng):
-        rng1, rng2 = random.split(rng)
-        actor_loss = self.actor_loss(s, rng1)
-        critic_loss = self.critic_loss(s, a, r, s_prime, a_prime, rng2)
-        return actor_loss + critic_loss
+
 
 @struct.dataclass
 class Metrics(metrics.Collection):
@@ -133,26 +100,84 @@ class Metrics(metrics.Collection):
     loss: metrics.Average.from_output('loss')    
     
 class TrainState(train_state.TrainState):
-    
+    actor_fn: Callable = struct.field(pytree_node=False)
+    critic1_fn: Callable = struct.field(pytree_node=False)
     metrics: Metrics
     
-def create_train_state(model:nn.Module ,rng:jax.Array, learning_rate, momentum):
+    act_dims: int
+    obs_dims: int
+    gamma: float
+    min_q_weight: float
+    num_act_samples: int
+    
+def create_train_state(rng:jax.Array, learning_rate, momentum, gamma=0.99, min_q_weight=0.5, num_act_samples=10, obs_dims=OBS_DIM, act_dims=ACT_DIM):
     """Creates an initial `TrainState`."""
+    model = SAC(ACT_DIM)
+    print(model.tabulate(rng, jnp.ones([1, OBS_DIM+1]),rng,compute_flops=True))
     params = model.init(rng, jnp.ones([1, OBS_DIM+1]),rng)['params'] # initialize parameters by passing a template image
     tx = optax.adam(learning_rate, momentum)
     # tx = optax.sgd(learning_rate, momentum)
     return TrainState.create(
-        apply_fn=model.apply, params=params, tx=tx,
-        metrics=Metrics.empty())
+        apply_fn=model.apply, 
+        params=params, tx=tx, 
+        actor_fn = Actor(model.act_dims).apply,
+        critic1_fn = Critic().apply,
+        metrics=Metrics.empty(),
+        act_dims=act_dims,
+        obs_dims=obs_dims,
+        gamma=gamma,
+        min_q_weight=min_q_weight,
+        num_act_samples=num_act_samples
+        )
 
 @jax.jit
-def train_step(state, batch,rng):
+def train_step(state:TrainState, batch,rng):
     """Train for a single step."""
+    
+    def actor_loss_fn(actor_params,x, rng):
+        q, mu, log_std = state.actor_fn({"params":actor_params},x, rng)
+        log_pi = log_pi(mu, log_std, mu)
+        return (-q + log_pi).mean()
+
+    def critic_loss_fn(actor_params,critic_params,s, a, r, s_prime, a_prime, rng):
+        rng1, rng2 = random.split(rng)
+        critic1 = functools.partial(state.critic1_fn, {"params":critic_params})
+        actor = functools.partial(state.actor_fn, {"params":actor_params})
+        
+        # q1 = state.critic1_fn({"params":critic_params},s, a)
+        q1 = critic1(s, a)
+        q_prime = critic1(s_prime, a_prime)
+        td_target = r + state.gamma * q_prime
+        td_loss = optax.l2_loss(q1, td_target).mean()
+        
+        mu,logstd = state.actor(s)
+        # sample action from current policy and uniform random
+        replicate_mu = jnp.repeat(mu, state.num_act_samples, axis=0)
+        replicate_logstd = jnp.repeat(logstd, state.num_act_samples, axis=0)
+        # shape: (batch_size*num_act_samples, act_dim)
+        policy_act = reparameterize(replicate_mu, replicate_logstd, rng1)
+        policy_random = random.uniform(rng2, shape=policy_act.shape, minval=-1, maxval=1)
+        
+        q_policy = critic1(s, policy_act)
+        q_random = critic1(s, policy_random)
+        min_q_loss = (q_policy - q_random).mean()
+        
+        return td_loss + min_q_loss*state.min_q_weight
+
+    def compute_loss(params,s, a, r, s_prime, a_prime, rng):
+        rng1, rng2 = random.split(rng)
+        actor_loss = actor_loss_fn(params['actor'],s, rng1)
+        critic_loss = critic_loss_fn(params,s, a, r, s_prime, a_prime, rng2)
+        return actor_loss + critic_loss
+    
     def loss_fn(params):
         # pred = state.apply_fn({'params': params}, batch['obs'])
         # loss = optax.l2_loss(pred, batch['act']).mean()
-        loss = state.apply_fn({'params':params},batch['obs'], batch['act'], batch['rew'], batch['obs_prime'], batch['act_prime'], rng,method='compute_loss')
+        # loss = state.compute_loss({'params':params},batch['obs'], batch['act'], batch['rew'], batch['obs_prime'], batch['act_prime'], rng)
+        loss = compute_loss(params,batch['obs'], batch['act'], batch['rew'], batch['obs_prime'], batch['act_prime'], rng)
         return loss
+    
+    
     # grad_fn = jax.grad(loss_fn)
     # grads = grad_fn(state.params)
     loss,grads = jax.value_and_grad(loss_fn)(state.params)
@@ -174,13 +199,14 @@ def train(SAMPLE_EXAMPLE=False,):
     
     data = make_dataset(MAKE_SARSA=True)
     merge_data = merge_dataset(data['walk_mr'])
+    
     train_ds = DataLoader(merge_data, batch_size=batch_size)
     
     learning_rate = optax.cosine_decay_schedule(init_value=learning_rate, decay_steps=num_epochs*len(train_ds), alpha=0.0)
     
-    model = SAC(obs_dims=OBS_DIM, act_dims=ACT_DIM, gamma=0.99, min_q_weight=0.5, num_act_samples=10)
-    print(model.tabulate(rng3, jnp.ones([1, OBS_DIM+1]),rng3,compute_flops=True))
-    state = create_train_state(model, rng2, learning_rate, momentum)
+    state = create_train_state(rng2, 
+                               learning_rate, momentum, 
+                               gamma=0.99, min_q_weight=0.5, num_act_samples=10)
     state = jax.device_put(state, device)
     
     metrics_history = {'train_loss': []}
