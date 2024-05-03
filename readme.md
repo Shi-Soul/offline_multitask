@@ -12,6 +12,8 @@ pip install jax # 0.4.26
 pip install flax #0.8.3
 pip install clu #0.0.12
 pip install fire #0.6.0
+pip install stable-baselines3[extra] #2.3.2
+pip install imageio
 ```
 
 ```bash
@@ -21,6 +23,14 @@ mv project/collected_data/ .
 rm -r project
 ```
 
-## Game Dynamics
+## Reference
 
 https://gymnasium.farama.org/environments/mujoco/walker2d/
+
+https://github.com/google-deepmind/dm_control
+
+https://sites.google.com/view/latent-policy
+
+https://flax.readthedocs.io/en/latest/index.html
+
+https://flax.readthedocs.io/en/latest/guides/training_techniques/dropout.html

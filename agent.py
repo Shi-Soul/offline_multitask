@@ -16,6 +16,6 @@ class Agent:
         pass
 
 
-make_dataset()
+# make_dataset()
 
 eval_agent(Agent(24, 6), eval_episodes=10,seed=1)

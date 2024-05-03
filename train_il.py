@@ -58,13 +58,13 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         x = nn.silu(nn.Dense(256)(x))+x
         # x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(256)(x))+x
-        x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(64)(x))
-        x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(64)(x))+x
-        x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(64)(x))+x
-        x = nn.LayerNorm()(x)
+        # x = nn.LayerNorm()(x)
+        # x = nn.silu(nn.Dense(64)(x))
+        # x = nn.LayerNorm()(x)
+        # x = nn.silu(nn.Dense(64)(x))+x
+        # x = nn.LayerNorm()(x)
+        # x = nn.silu(nn.Dense(64)(x))+x
+        # x = nn.LayerNorm()(x)
         x = nn.Dense(self.out_dims)(x)       # shape inference
         return x
 
@@ -116,6 +116,7 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
     init_rng = jax.random.key(SEED)
 
     num_epochs = 100
+    # num_epochs = 100
     learning_rate = 0.002
     momentum = 0.9
     batch_size = 1024
@@ -124,9 +125,9 @@ def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
     
     
     data = make_dataset()
-    merge_data = merge_dataset(data['run_m'],data['walk_m'])
+    # merge_data = merge_dataset(data['run_m'],data['walk_m'])
     # merge_data = merge_dataset(*data.values())
-    # merge_data = merge_dataset(data['run_m'], data['run_mr'])
+    merge_data = merge_dataset(data['walk_mr'])
     if TRAIN_TEST_SPLIT:
         # split data into train and test
         train_data, test_data = train_test_split(merge_data, test_size=test_size)
