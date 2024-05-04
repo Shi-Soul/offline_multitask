@@ -4,3 +4,4 @@
 ckpt
 collected_data
 *.pyc
+wandb

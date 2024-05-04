@@ -80,11 +80,11 @@ class Critic(nn.Module):
 class SAC(nn.Module):
     obs_dims: int
     act_dims: int
-    gamma: float = 0.99999
-    min_q_weight: float = 0.2
+    gamma: float = 0.999
+    min_q_weight: float = 0.05
     num_act_samples: int = 20
     alpha: float = 0.00
-    lambda_critics: float = 30.0
+    lambda_critics: float = 1.0
     
     def setup(self):
         self.actor = Actor(act_dims=self.act_dims)
@@ -128,7 +128,7 @@ class SAC(nn.Module):
                                x, act)
         q = jnp.minimum(q1, q2)
         
-        log_pi = self.log_pi(mu, log_std, mu)
+        log_pi = self.log_pi(mu, log_std, act)
         qmean = q.mean()
         entropy = -log_pi.mean()
         # return (-q + log_pi* self.alpha).mean()
@@ -197,6 +197,7 @@ class Metrics(metrics.Collection):
     entropy: metrics.Average.from_output('entropy')
     td_loss: metrics.Average.from_output('td_loss')
     min_q_loss: metrics.Average.from_output('min_q_loss')
+    grads_norm: metrics.Average.from_output('grads_norm')
         
     
 class TrainState(train_state.TrainState):
@@ -206,7 +207,13 @@ class TrainState(train_state.TrainState):
 def create_train_state(model:nn.Module ,rng:jax.Array, learning_rate, beta1):
     """Creates an initial `TrainState`."""
     params = model.init(rng, jnp.ones([1, OBS_DIM+1]),rng)['params'] # initialize parameters by passing a template image
-    tx = optax.adam(learning_rate, beta1)
+    # tx = optax.sgd(learning_rate, beta1)
+    # tx = optax.adam(learning_rate, beta1)
+    tx = optax.chain(
+        optax.clip_by_global_norm(1.0),
+        # optax.add_decayed_weights(1e-5),
+        optax.adam(learning_rate, beta1)
+    )
     params['target_critic1'] = params['critic1']
     params['target_critic2'] = params['critic2']
     # tx = optax.sgd(learning_rate, momentum)
@@ -225,32 +232,44 @@ def train_step(state, batch,rng):
         return total_loss, aux
     
     (loss, aux),grads = jax.value_and_grad(loss_fn,has_aux=True)(state.params)
+    grads_norm = optax.global_norm(grads)
     # jax.debug.print("Total loss {loss}",loss=loss)
     state = state.apply_gradients(grads=grads)
     state = state.replace(metrics=state.metrics.merge(
         Metrics.single_from_model_output(
             loss=loss,
+            grads_norm = grads_norm,
             **aux
                                          )))
     return state
 
-def train(SAMPLE_EXAMPLE=False,):
+def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
+    # VERBOSE: 0,1,2
+        # 0: No print
+        # 1: Print loss after each epoch
+    if USE_WANDB:
+        os.environ['WANDB_SILENT'] = 'true'
+        import wandb
+        wandb.init(project="rlp", name="cqlsac_"+time.strftime("%Y-%m-%d-%H:%M:%S") , save_code=True)
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
     init_rng, rng1, rng2, rng3 = random.split(init_rng, 4)
 
-    num_epochs = 300
+    num_epochs = 500
     learning_rate = 0.0003
     beta1 = 0.99
     batch_size = 512
     test_size = 0.2
-    gamma=0.99
-    min_q_weight=0.5
-    num_act_samples=10
-    target_update_interval=10
+    target_update_interval=5
     
     data = make_dataset(MAKE_SARSA=True)
     merge_data = merge_dataset(data['walk_mr'])
+    merge_data, rew_mean, rew_std = reward_normalize(merge_data)
+    print("Reward Normalize Mean, Std: ", rew_mean, rew_std)
+    if USE_WANDB:
+        wandb.config.update({"reward_mean":rew_mean, "reward_std":rew_std})
+        # wandb.config.reward_mean = rew_mean
+        # wandb.config.reward_std = rew_std
     train_ds = DataLoader(merge_data, batch_size=batch_size)
     
     # learning_rate = optax.cosine_decay_schedule(init_value=learning_rate, decay_steps=num_epochs*len(train_ds), alpha=0.0)
@@ -261,10 +280,6 @@ def train(SAMPLE_EXAMPLE=False,):
     state = create_train_state(model, rng2, learning_rate, beta1)
     state = jax.device_put(state, device)
     
-    metrics_history = {'train_loss': [], 'train_actor_loss': [], 'train_critic_loss': [],
-                        'train_q': [], 'train_entropy': [], 'train_td_loss': [], 'train_min_q_loss': []
-                        
-                       }
     
     for epoch in range(num_epochs):
         
@@ -275,25 +290,17 @@ def train(SAMPLE_EXAMPLE=False,):
                 
                 state.params['target_critic1'] = state.params['critic1']
                 state.params['target_critic2'] = state.params['critic2']
-                # state = state.replace(target_critic1=state.critic1, target_critic2=state.critic2)
-            
-        for metric,value in state.metrics.compute().items(): # compute metrics
-            metrics_history[f'train_{metric}'].append(value) # record metrics
+        metric_res = state.metrics.compute()
         
         state = state.replace(metrics=state.metrics.empty()) 
         
-        # print(f"train epoch\t: {epoch}, "
-        #     f"\tloss: {metrics_history['train_loss'][-1]}, ")
-        print(f"train epoch\t: {epoch}, "
-            f"\tloss: {metrics_history['train_loss'][-1]}, \n"
-            f"\tactor_loss: {metrics_history['train_actor_loss'][-1]}, "
-            f"\tcritic_loss: {metrics_history['train_critic_loss'][-1]}\n"
-            f"\tq: {metrics_history['train_q'][-1]}, "
-            f"\tentropy: {metrics_history['train_entropy'][-1]}, \n"
-            f"\ttd_loss: {metrics_history['train_td_loss'][-1]}, "
-            f"\tmin_q_loss: {metrics_history['train_min_q_loss'][-1]}, "
-            )
-        
+        if USE_WANDB:
+            wandb.log(metric_res, step=epoch)
+        if VERBOSE>=1:
+            print(f"train epoch\t: {epoch}, "
+                  * [f"\t{key}: {value}, \n" for key,value in metric_res.items()]
+                  )
+            
     checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','cql'),
                             target=state,
                             step=0,
@@ -332,8 +339,6 @@ def test():
     agent = CQLSACAgent(state, OBS_DIM, ACT_DIM, rng=rng3)
     eval_agent(agent, eval_episodes=5,seed=SEED)
     
-    raise NotImplementedError
-    ...
 
 if __name__=="__main__":
     try:

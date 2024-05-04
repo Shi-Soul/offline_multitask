@@ -139,6 +139,14 @@ def merge_dataset(*args):
         ret[key] = np.concatenate([dataset[key] for dataset in args], axis=0)
     return ret
 
+def reward_normalize(dataset):
+    # dataset: dict_keys(['obs', 'act', 'phy', 'rew'])
+    rew = dataset['rew']
+    mean,std = np.mean(rew), np.std(rew)
+    rew = (rew - mean) / std
+    assert np.abs(np.mean(rew))<1e-6 and np.abs(np.std(rew)-1)<1e-6, (np.mean(rew), np.std(rew))
+    dataset['rew'] = rew
+    return dataset, mean, std
 
 
 def train_test_split(data, test_size=0.2):
