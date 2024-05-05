@@ -3,13 +3,13 @@
 
 Baseline
 - Dataset Expert Performance: 
-    - 318.36557 251.48225 962.8321 929.83185   
+    - run (318.36557 251.48225), walk (962.8321 929.83185)   
 - Random Policy Performance: 
-    - 
+    - walk 56, run 29
 
 What have been done:
 - Implement the Naive Imitation Learning algorithm
-    - Score: xx (Run), xx (Walk)
+    - Score: 131 (Walk), 53 (Run)
 - Implement the CQL-SAC algorithm
     - Not so good, critic loss is too large, result in actor's behaviour nearly random
     - in training, the critic looks like in self-excitation oscillation
@@ -21,9 +21,11 @@ What have been done:
 What may be done in future:
 - Try to finetune the CQL-SAC algorithm, add some tricks to improve the performance
 - Try to implement model base methods
+    - First try deterministic env model, train a ppo / sac 
+    - If stochastic env model is needed, try to train a vae to predict the next state
 
 
-## Environment Setup
+## Usage
 
 ```bash
 conda create -n rlp python=3.10 -y
@@ -50,6 +52,17 @@ unzip Project.zip project/collected_data/*
 mv project/collected_data/ .
 rm -r project
 ```
+
+```bash
+# Run random policy and two algorithms
+python agent.py
+python train_il.py train
+python train_il.py test
+python train_cqlsac.py train
+python train_cqlsac.py test
+```
+
+
 
 ## Reference
 
