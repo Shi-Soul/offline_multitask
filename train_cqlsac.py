@@ -87,7 +87,7 @@ class SAC(nn.Module):
     num_act_samples: int = 20
     alpha_init: float = 0.05
     lambda_critics: float = 1.0
-    entropy_target: float = 15
+    entropy_target: float = 5
     
     def setup(self):
         self.actor = Actor(act_dims=self.act_dims)
@@ -126,8 +126,8 @@ class SAC(nn.Module):
         return jnp.sum(-0.5 * jnp.log(2 * jnp.pi) - log_std - 0.5 * jnp.square((act - mu) / std), axis=-1)
 
     def actor_loss(self, x, rng):
-        mu,log_std = self.actor(x)
-        log_std = jnp.clip(log_std, None, 30)
+        mu,log_std_noclip = self.actor(x)
+        log_std = jnp.clip(log_std_noclip, None, 30)
         act = self.reparameterize(mu, log_std, rng)
         
         alpha = jnp.exp(self.log_alpha)
@@ -144,13 +144,13 @@ class SAC(nn.Module):
         log_pi = self.log_pi(mu, log_std, act)
         qmean = q.mean()
         entropy = -log_pi.mean()
-        alpha_loss = -alpha * jax.lax.stop_gradient(entropy - self.entropy_target)
+        alpha_loss = -alpha * jax.lax.stop_gradient(self.entropy_target-entropy)
         # return (-q + log_pi* self.alpha).mean()
         return -qmean-entropy*jax.lax.stop_gradient(alpha), alpha_loss, \
                     {"q_actor":qmean, 
                      "entropy":entropy, 
                      "log_std_mean":jnp.mean(log_std), 
-                     "log_std_max":jnp.max(log_std),
+                     "log_std_max":jnp.max(log_std_noclip),
                      "alpha":alpha
                      }
     

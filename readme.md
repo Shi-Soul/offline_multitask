@@ -17,6 +17,8 @@ What have been done:
         - r + gamma Q=Q => Q=r/(1-gamma), which cause the Q value to be very large and meaningless
         - td error is very large: in terminal state, target value is super small, but the Q value is very large
         - in offline training, the model have no idea about the terminal state and timestep limit
+        - **possible solution**: reward normalization
+    - when add tanh to output of actor, nan appear in around 30 epochs
 
 What may be done in future:
 - Try to finetune the CQL-SAC algorithm, add some tricks to improve the performance
