@@ -100,10 +100,12 @@ class SAC(nn.Module):
         act = self.reparameterize(mu, log_std, rng)
         q1 = self.critic1(x, act)
         q2 = self.critic2(x, act)
-        q = jnp.minimum(q1, q2)
+        # q = jnp.minimum(q1, q2)
+        q = (q1+ q2)/2
         target_q1 = self.target_critic1(x, act)
         target_q2 = self.target_critic2(x, act)
-        target_q = jnp.minimum(target_q1, target_q2)
+        target_q = (target_q1+ target_q2)/2
+        # target_q = jnp.minimum(target_q1, target_q2)
         return q, target_q, mu, log_std
     
     def action(self, x, rng):
@@ -129,7 +131,8 @@ class SAC(nn.Module):
         q2 = self.critic2.apply({
             'params': jax.lax.stop_gradient(self.critic2.variables['params'])}, 
                                x, act)
-        q = jnp.minimum(q1, q2)
+        q = (q1+ q2)/2
+        # q = jnp.minimum(q1, q2)
         
         log_pi = self.log_pi(mu, log_std, act)
         qmean = q.mean()
@@ -145,7 +148,8 @@ class SAC(nn.Module):
         
         q1_target = self.target_critic1(s_prime, a_prime)
         q2_target = self.target_critic2(s_prime, a_prime)
-        q_target = jnp.minimum(q1_target, q2_target)
+        q_target = (q1_target+ q2_target)/2
+        # q_target = jnp.minimum(q1_target, q2_target)
         td_target = jax.lax.stop_gradient(r + self.gamma * q_target*(1-done))
         
         td1_loss = optax.l2_loss(q1, (td_target)).mean()
@@ -165,22 +169,29 @@ class SAC(nn.Module):
         
         replicate_s = jnp.repeat(s, self.num_act_samples, axis=0)
         q1_dataset = self.critic1(replicate_s, dataset_act)
-        q1_random = self.critic1(replicate_s, random_act)
         q2_dataset = self.critic2(replicate_s, dataset_act)
+        q_dataset = (q1_dataset+ q2_dataset)/2
+        q_dataset_mean = q_dataset.mean()
+        
+        q1_random = self.critic1(replicate_s, random_act)
         q2_random = self.critic2(replicate_s, random_act)
-        q_dataset = jnp.minimum(q1_dataset, q2_dataset)
-        q_random = jnp.minimum(q1_random, q2_random)
-        min_q_loss = (q_dataset - q_random).mean()
+        q_random = (q1_random+ q2_random)/2
+        q_random_mean = q_random.mean()
+        
+        # q_dataset = jnp.minimum(q1_dataset, q2_dataset)
+        # q_random = jnp.minimum(q1_random, q2_random)
+        
+        min_q_loss = q_random_mean - q_dataset_mean
         
         return td_loss + min_q_loss*self.min_q_weight, \
                     td_loss, min_q_loss, q_target.mean(),\
-                    q_dataset.mean()
+                    q_dataset_mean, q_random_mean
                     
     
     def compute_loss(self, s, a, r, s_prime, a_prime, done, rng):
         rng1, rng2 = random.split(rng)
         actor_loss, q_actor, entropy = self.actor_loss(s, rng1)
-        critic_loss, td_loss, min_q_loss, q_target, q_dataset= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
+        critic_loss, td_loss, min_q_loss, q_target, q_dataset,q_random= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
         total_loss = actor_loss + critic_loss*self.lambda_critics
         
         return total_loss, {
@@ -188,7 +199,8 @@ class SAC(nn.Module):
             "critic_loss":critic_loss, 
             "q_actor":q_actor, 
             "q_target":q_target,
-            "q_dataset":q_target,
+            "q_dataset":q_dataset,
+            "q_random":q_random,
             "entropy":entropy, 
             "td_loss":td_loss, 
             "min_q_loss":min_q_loss
@@ -204,6 +216,7 @@ class Metrics(metrics.Collection):
     q_actor: metrics.Average.from_output('q_actor')
     q_target: metrics.Average.from_output('q_target')
     q_dataset: metrics.Average.from_output('q_dataset')
+    q_random: metrics.Average.from_output('q_random')
     entropy: metrics.Average.from_output('entropy')
     td_loss: metrics.Average.from_output('td_loss')
     min_q_loss: metrics.Average.from_output('min_q_loss')
@@ -224,15 +237,24 @@ def create_train_state(model:nn.Module ,rng:jax.Array, learning_rate, beta1):
         # optax.add_decayed_weights(1e-5),
         optax.adam(learning_rate, beta1)
     )
-    # FIXME: 这里没有成功的copy两个网络的参数
-    # 他们实际上绑到一起了, 输出是完全一致的
-    # params['target_critic1'] = params['critic1']
-    # params['target_critic2'] = params['critic2']
     # tx = optax.sgd(learning_rate, momentum)
+    # state= TrainState.create(
+    #     apply_fn=model.apply, params=FrozenDict(params), tx=tx,
+    #     metrics=Metrics.empty())
     state= TrainState.create(
-        apply_fn=model.apply, params=FrozenDict(params), tx=tx,
+        apply_fn=model.apply, params=params, tx=tx,
         metrics=Metrics.empty())
     return state
+
+def soft_update_target(state:TrainState,tau=0.9):
+    
+    state.params['target_critic1']= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic1'] ,state.params['target_critic1'] )
+    state.params['target_critic2']= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic2'] ,state.params['target_critic2'] )
+    # new_params = state.params.copy({"target_critic1":new_tp1,
+    #                                     "target_critic2":new_tp2})
+    # return state.replace(params=new_params)
+    # return state
+    ...
 
 @jax.jit
 def train_step(state, batch,rng):
@@ -305,13 +327,8 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True, DEBUG=False):
             rng1, rng2 = random.split(rng1, 2)
             state = train_step(state, batch, rng2)
             if step%target_update_interval==0:
-                new_params = state.params.copy({"target_critic1":state.params['critic1'].copy(),
-                                                    "target_critic2":state.params['critic2'].copy()})
-                # new_params = state.params.copy()
-                                                    
-                state = state.replace(params=new_params)
-                # state.params['target_critic1'] = state.params['critic1']
-                # state.params['target_critic2'] = state.params['critic2']
+                # import pdb;pdb.set_trace()
+                soft_update_target(state)
         metric_res = state.metrics.compute()
         
         state = state.replace(metrics=state.metrics.empty()) 
