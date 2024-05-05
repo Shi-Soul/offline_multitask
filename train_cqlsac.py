@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from flax.core import FrozenDict
 import flax.linen as nn
 from jax import random
 from clu import metrics
@@ -60,8 +61,7 @@ class Actor(nn.Module):
         mu = jnp.tanh(mu)
         # mu,log_std = jnp.split(x.reshape(-1, self.act_dims, 2),2, axis=-1)
         return mu,log_std
-
-    
+  
 class Critic(nn.Module):
     @nn.compact
     def __call__(self, x, a):
@@ -69,11 +69,11 @@ class Critic(nn.Module):
         a = a.reshape((a.shape[0], -1))
         x = jnp.concatenate([x, a], axis=-1)
         x = nn.silu(nn.Dense(256)(x))
-        x = nn.LayerNorm()(x)
+        # x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(256)(x))+x
         x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(256)(x))+x
-        x = nn.LayerNorm()(x)
+        # x = nn.silu(nn.Dense(256)(x))+x
+        # x = nn.LayerNorm()(x)
         x = nn.Dense(1)(x)
         return x
     
@@ -94,13 +94,17 @@ class SAC(nn.Module):
         self.target_critic2 = Critic()
         
     def __call__(self, x, rng):
-        # mu,log_std = jnp.split(self.actor(x).reshape(-1, self.act_dims, 2),2, axis=-1)
+        # Only used for initialization
+        
         mu,log_std = self.actor(x)
         act = self.reparameterize(mu, log_std, rng)
         q1 = self.critic1(x, act)
         q2 = self.critic2(x, act)
         q = jnp.minimum(q1, q2)
-        return q, mu, log_std
+        target_q1 = self.target_critic1(x, act)
+        target_q2 = self.target_critic2(x, act)
+        target_q = jnp.minimum(target_q1, target_q2)
+        return q, target_q, mu, log_std
     
     def action(self, x, rng):
         mu,log_std = self.actor(x)
@@ -116,7 +120,6 @@ class SAC(nn.Module):
         return jnp.sum(-0.5 * jnp.log(2 * jnp.pi) - log_std - 0.5 * jnp.square((act - mu) / std), axis=-1)
 
     def actor_loss(self, x, rng):
-        # q, mu, log_std = self(x, rng)
         mu,log_std = self.actor(x)
         act = self.reparameterize(mu, log_std, rng)
         
@@ -165,22 +168,27 @@ class SAC(nn.Module):
         q1_random = self.critic1(replicate_s, random_act)
         q2_dataset = self.critic2(replicate_s, dataset_act)
         q2_random = self.critic2(replicate_s, random_act)
-        q_policy = jnp.minimum(q1_dataset, q2_dataset)
+        q_dataset = jnp.minimum(q1_dataset, q2_dataset)
         q_random = jnp.minimum(q1_random, q2_random)
-        min_q_loss = (q_policy - q_random).mean()
+        min_q_loss = (q_dataset - q_random).mean()
         
-        return td_loss + min_q_loss*self.min_q_weight, td_loss, min_q_loss
+        return td_loss + min_q_loss*self.min_q_weight, \
+                    td_loss, min_q_loss, q_target.mean(),\
+                    q_dataset.mean()
+                    
     
     def compute_loss(self, s, a, r, s_prime, a_prime, done, rng):
         rng1, rng2 = random.split(rng)
-        actor_loss, q, entropy = self.actor_loss(s, rng1)
-        critic_loss, td_loss, min_q_loss= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
+        actor_loss, q_actor, entropy = self.actor_loss(s, rng1)
+        critic_loss, td_loss, min_q_loss, q_target, q_dataset= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
         total_loss = actor_loss + critic_loss*self.lambda_critics
         
         return total_loss, {
             "actor_loss":actor_loss, 
             "critic_loss":critic_loss, 
-            "q":q, 
+            "q_actor":q_actor, 
+            "q_target":q_target,
+            "q_dataset":q_target,
             "entropy":entropy, 
             "td_loss":td_loss, 
             "min_q_loss":min_q_loss
@@ -193,7 +201,9 @@ class Metrics(metrics.Collection):
     loss: metrics.Average.from_output('loss') 
     actor_loss: metrics.Average.from_output('actor_loss') 
     critic_loss: metrics.Average.from_output('critic_loss')
-    q: metrics.Average.from_output('q')
+    q_actor: metrics.Average.from_output('q_actor')
+    q_target: metrics.Average.from_output('q_target')
+    q_dataset: metrics.Average.from_output('q_dataset')
     entropy: metrics.Average.from_output('entropy')
     td_loss: metrics.Average.from_output('td_loss')
     min_q_loss: metrics.Average.from_output('min_q_loss')
@@ -210,15 +220,17 @@ def create_train_state(model:nn.Module ,rng:jax.Array, learning_rate, beta1):
     # tx = optax.sgd(learning_rate, beta1)
     # tx = optax.adam(learning_rate, beta1)
     tx = optax.chain(
-        optax.clip_by_global_norm(1.0),
+        optax.clip_by_global_norm(100.0),
         # optax.add_decayed_weights(1e-5),
         optax.adam(learning_rate, beta1)
     )
-    params['target_critic1'] = params['critic1']
-    params['target_critic2'] = params['critic2']
+    # FIXME: 这里没有成功的copy两个网络的参数
+    # 他们实际上绑到一起了, 输出是完全一致的
+    # params['target_critic1'] = params['critic1']
+    # params['target_critic2'] = params['critic2']
     # tx = optax.sgd(learning_rate, momentum)
     state= TrainState.create(
-        apply_fn=model.apply, params=params, tx=tx,
+        apply_fn=model.apply, params=FrozenDict(params), tx=tx,
         metrics=Metrics.empty())
     return state
 
@@ -243,10 +255,16 @@ def train_step(state, batch,rng):
                                          )))
     return state
 
-def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
+def debug_setup():
+    os.environ['JAX_DEBUG_NANS'] = "True"
+    ...
+
+def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True, DEBUG=False):
     # VERBOSE: 0,1,2
         # 0: No print
         # 1: Print loss after each epoch
+    if DEBUG:
+        debug_setup()
     if USE_WANDB:
         os.environ['WANDB_SILENT'] = 'true'
         import wandb
@@ -271,13 +289,13 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
         # wandb.config.reward_mean = rew_mean
         # wandb.config.reward_std = rew_std
     train_ds = DataLoader(merge_data, batch_size=batch_size)
+    print("Train Dataloader Size",len(train_ds))
     
     # learning_rate = optax.cosine_decay_schedule(init_value=learning_rate, decay_steps=num_epochs*len(train_ds), alpha=0.0)
     
     model = SAC(obs_dims=OBS_DIM, act_dims=ACT_DIM)
     print(model.tabulate(rng3, jnp.ones([1, OBS_DIM+1]),rng3,compute_flops=True))
-    print("Train Dataloader Size",len(train_ds))
-    state = create_train_state(model, rng2, learning_rate, beta1)
+    state: TrainState = create_train_state(model, rng2, learning_rate, beta1)
     state = jax.device_put(state, device)
     
     
@@ -287,9 +305,13 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
             rng1, rng2 = random.split(rng1, 2)
             state = train_step(state, batch, rng2)
             if step%target_update_interval==0:
-                
-                state.params['target_critic1'] = state.params['critic1']
-                state.params['target_critic2'] = state.params['critic2']
+                new_params = state.params.copy({"target_critic1":state.params['critic1'].copy(),
+                                                    "target_critic2":state.params['critic2'].copy()})
+                # new_params = state.params.copy()
+                                                    
+                state = state.replace(params=new_params)
+                # state.params['target_critic1'] = state.params['critic1']
+                # state.params['target_critic2'] = state.params['critic2']
         metric_res = state.metrics.compute()
         
         state = state.replace(metrics=state.metrics.empty()) 
@@ -297,8 +319,8 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
         if USE_WANDB:
             wandb.log(metric_res, step=epoch)
         if VERBOSE>=1:
-            print(f"train epoch\t: {epoch}, "
-                  * [f"\t{key}: {value}, \n" for key,value in metric_res.items()]
+            print(f"train epoch\t: {epoch}, \n",
+                  *[f"\t{key}\t: {value}, \n" for key,value in metric_res.items()]
                   )
             
     checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','cql'),
@@ -313,7 +335,7 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
         # inference
         num_sample = 10 
         rng1, rng2 = random.split(rng1)
-        act = state.apply_fn({'params': state.params}, batch['obs'][:num_sample],rng2)
+        act = state.apply_fn({'params': state.params}, batch['obs'][:num_sample],rng2, method="action")
         loss = optax.l2_loss(act, batch['act'][:num_sample]).mean()
         print("DEBUG: batch['obs']", batch['obs'][:num_sample])
         print("DEBUG: act", act)
