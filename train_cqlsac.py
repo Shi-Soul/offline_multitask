@@ -58,7 +58,7 @@ class Actor(nn.Module):
         x = nn.Dense(self.act_dims*2)(x)
         # mu and log_std
         mu,log_std = jnp.split(x,2, axis=-1)
-        mu = jnp.tanh(mu)
+        # mu = jnp.tanh(mu)
         # mu,log_std = jnp.split(x.reshape(-1, self.act_dims, 2),2, axis=-1)
         return mu,log_std
   
@@ -69,7 +69,7 @@ class Critic(nn.Module):
         a = a.reshape((a.shape[0], -1))
         x = jnp.concatenate([x, a], axis=-1)
         x = nn.silu(nn.Dense(256)(x))
-        # x = nn.LayerNorm()(x)
+        x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(256)(x))+x
         x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(256)(x))+x
@@ -81,9 +81,9 @@ class SAC(nn.Module):
     obs_dims: int
     act_dims: int
     gamma: float = 0.999
-    min_q_weight: float = 0.05
+    min_q_weight: float = 0.01
     num_act_samples: int = 20
-    alpha: float = 0.00
+    alpha: float = 0.01
     lambda_critics: float = 1.0
     
     def setup(self):
@@ -193,6 +193,7 @@ class SAC(nn.Module):
         actor_loss, q_actor, entropy = self.actor_loss(s, rng1)
         critic_loss, td_loss, min_q_loss, q_target, q_dataset,q_random= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
         total_loss = actor_loss + critic_loss*self.lambda_critics
+        # total_loss = actor_loss + critic_loss*self.lambda_critics
         
         return total_loss, {
             "actor_loss":actor_loss, 
@@ -277,20 +278,18 @@ def train_step(state, batch,rng):
                                          )))
     return state
 
-def debug_setup():
-    os.environ['JAX_DEBUG_NANS'] = "True"
+# def debug_setup():
+#     os.environ['JAX_DEBUG_NANS'] = "True"
     ...
 
-def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True, DEBUG=False):
+def train(exp_name="",SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
     # VERBOSE: 0,1,2
         # 0: No print
         # 1: Print loss after each epoch
-    if DEBUG:
-        debug_setup()
     if USE_WANDB:
         os.environ['WANDB_SILENT'] = 'true'
         import wandb
-        wandb.init(project="rlp", name="cqlsac_"+time.strftime("%Y-%m-%d-%H:%M:%S") , save_code=True)
+        wandb.init(project="rlp", name="cqlsac_"+exp_name+"_"+time.strftime("%m%d-%H:%M:%S") , save_code=True)
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
     init_rng, rng1, rng2, rng3 = random.split(init_rng, 4)
@@ -301,6 +300,7 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True, DEBUG=False):
     batch_size = 512
     test_size = 0.2
     target_update_interval=5
+    tau = 0.9
     
     data = make_dataset(MAKE_SARSA=True)
     merge_data = merge_dataset(data['walk_mr'])
@@ -328,7 +328,7 @@ def train(SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True, DEBUG=False):
             state = train_step(state, batch, rng2)
             if step%target_update_interval==0:
                 # import pdb;pdb.set_trace()
-                soft_update_target(state)
+                soft_update_target(state,tau)
         metric_res = state.metrics.compute()
         
         state = state.replace(metrics=state.metrics.empty()) 
