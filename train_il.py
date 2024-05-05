@@ -66,7 +66,7 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.silu(nn.Dense(64)(x))+x
         # x = nn.LayerNorm()(x)
         x = nn.Dense(self.out_dims)(x)       # shape inference
-        x = nn.tanh(x)  #*5 FIXME: action range
+        x = nn.tanh(x)
         return x
 
 @struct.dataclass

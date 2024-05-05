@@ -58,7 +58,9 @@ class Actor(nn.Module):
         x = nn.Dense(self.act_dims*2)(x)
         # mu and log_std
         mu,log_std = jnp.split(x,2, axis=-1)
-        # mu = jnp.tanh(mu)
+        # before_tanh = mu
+        # jax.debug.print("DEBUG: before_tanh: {v}",v=jnp.max(before_tanh))
+        mu = jnp.tanh(mu)
         # mu,log_std = jnp.split(x.reshape(-1, self.act_dims, 2),2, axis=-1)
         return mu,log_std
   
@@ -83,8 +85,9 @@ class SAC(nn.Module):
     gamma: float = 0.999
     min_q_weight: float = 0.01
     num_act_samples: int = 20
-    alpha: float = 0.01
+    alpha_init: float = 0.05
     lambda_critics: float = 1.0
+    entropy_target: float = 15
     
     def setup(self):
         self.actor = Actor(act_dims=self.act_dims)
@@ -92,6 +95,7 @@ class SAC(nn.Module):
         self.critic2 = Critic()
         self.target_critic1 = Critic()
         self.target_critic2 = Critic()
+        self.log_alpha = self.param("log_alpha", lambda key: jnp.log(self.alpha_init))
         
     def __call__(self, x, rng):
         # Only used for initialization
@@ -123,7 +127,10 @@ class SAC(nn.Module):
 
     def actor_loss(self, x, rng):
         mu,log_std = self.actor(x)
+        log_std = jnp.clip(log_std, None, 30)
         act = self.reparameterize(mu, log_std, rng)
+        
+        alpha = jnp.exp(self.log_alpha)
         
         q1 = self.critic1.apply({
             'params': jax.lax.stop_gradient(self.critic1.variables['params'])}, 
@@ -137,8 +144,15 @@ class SAC(nn.Module):
         log_pi = self.log_pi(mu, log_std, act)
         qmean = q.mean()
         entropy = -log_pi.mean()
+        alpha_loss = -alpha * jax.lax.stop_gradient(entropy - self.entropy_target)
         # return (-q + log_pi* self.alpha).mean()
-        return -qmean-entropy*self.alpha, qmean, entropy
+        return -qmean-entropy*jax.lax.stop_gradient(alpha), alpha_loss, \
+                    {"q_actor":qmean, 
+                     "entropy":entropy, 
+                     "log_std_mean":jnp.mean(log_std), 
+                     "log_std_max":jnp.max(log_std),
+                     "alpha":alpha
+                     }
     
     def critic_loss(self, s, a, r, s_prime, a_prime,done, rng):
         rng1, rng2 = random.split(rng)
@@ -184,27 +198,27 @@ class SAC(nn.Module):
         min_q_loss = q_random_mean - q_dataset_mean
         
         return td_loss + min_q_loss*self.min_q_weight, \
-                    td_loss, min_q_loss, q_target.mean(),\
-                    q_dataset_mean, q_random_mean
+                    {"td_loss":td_loss, 
+                     "min_q_loss":min_q_loss, 
+                     "q_target":q_target.mean(),
+                    "q_dataset":q_dataset_mean, 
+                    "q_random":q_random_mean
+                    }
                     
     
     def compute_loss(self, s, a, r, s_prime, a_prime, done, rng):
         rng1, rng2 = random.split(rng)
-        actor_loss, q_actor, entropy = self.actor_loss(s, rng1)
-        critic_loss, td_loss, min_q_loss, q_target, q_dataset,q_random= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
-        total_loss = actor_loss + critic_loss*self.lambda_critics
+        actor_loss, alpha_loss, actor_aux = self.actor_loss(s, rng1)
+        critic_loss, critic_aux= self.critic_loss(s, a, r, s_prime, a_prime,done, rng2)
+        total_loss = actor_loss+ alpha_loss + critic_loss*self.lambda_critics
         # total_loss = actor_loss + critic_loss*self.lambda_critics
         
         return total_loss, {
             "actor_loss":actor_loss, 
             "critic_loss":critic_loss, 
-            "q_actor":q_actor, 
-            "q_target":q_target,
-            "q_dataset":q_dataset,
-            "q_random":q_random,
-            "entropy":entropy, 
-            "td_loss":td_loss, 
-            "min_q_loss":min_q_loss
+            "alpha_loss":alpha_loss,
+            **actor_aux,
+            **critic_aux
             }
         # return actor_loss + critic_loss
 
@@ -214,14 +228,20 @@ class Metrics(metrics.Collection):
     loss: metrics.Average.from_output('loss') 
     actor_loss: metrics.Average.from_output('actor_loss') 
     critic_loss: metrics.Average.from_output('critic_loss')
+    alpha_loss: metrics.Average.from_output('alpha_loss')
+    
+    alpha: metrics.Average.from_output('alpha')
     q_actor: metrics.Average.from_output('q_actor')
     q_target: metrics.Average.from_output('q_target')
     q_dataset: metrics.Average.from_output('q_dataset')
     q_random: metrics.Average.from_output('q_random')
+    
     entropy: metrics.Average.from_output('entropy')
     td_loss: metrics.Average.from_output('td_loss')
     min_q_loss: metrics.Average.from_output('min_q_loss')
     grads_norm: metrics.Average.from_output('grads_norm')
+    log_std_mean: metrics.Average.from_output('log_std_mean')
+    log_std_max: metrics.Average.from_output('log_std_max')
         
     
 class TrainState(train_state.TrainState):
@@ -249,10 +269,12 @@ def create_train_state(model:nn.Module ,rng:jax.Array, learning_rate, beta1):
 
 def soft_update_target(state:TrainState,tau=0.9):
     
+    # new_tp1= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic1'] ,state.params['target_critic1'] )
+    # new_tp2= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic2'] ,state.params['target_critic2'] )
     state.params['target_critic1']= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic1'] ,state.params['target_critic1'] )
     state.params['target_critic2']= jax.tree.map(lambda p,tp: p*tau + tp*(1-tau),state.params['critic2'] ,state.params['target_critic2'] )
     # new_params = state.params.copy({"target_critic1":new_tp1,
-    #                                     "target_critic2":new_tp2})
+                                        # "target_critic2":new_tp2})
     # return state.replace(params=new_params)
     # return state
     ...
@@ -316,8 +338,8 @@ def train(exp_name="",SAMPLE_EXAMPLE=False,VERBOSE=1, USE_WANDB=True):
     # learning_rate = optax.cosine_decay_schedule(init_value=learning_rate, decay_steps=num_epochs*len(train_ds), alpha=0.0)
     
     model = SAC(obs_dims=OBS_DIM, act_dims=ACT_DIM)
-    print(model.tabulate(rng3, jnp.ones([1, OBS_DIM+1]),rng3,compute_flops=True))
     state: TrainState = create_train_state(model, rng2, learning_rate, beta1)
+    print(model.tabulate(rng3, jnp.ones([1, OBS_DIM+1]),rng3,compute_flops=True))
     state = jax.device_put(state, device)
     
     
