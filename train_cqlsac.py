@@ -87,7 +87,7 @@ class SAC(nn.Module):
     num_act_samples: int = 20
     alpha_init: float = 0.05
     lambda_critics: float = 1.0
-    entropy_target: float = 5
+    entropy_target: float = 2
     
     def setup(self):
         self.actor = Actor(act_dims=self.act_dims)
@@ -115,6 +115,7 @@ class SAC(nn.Module):
     def action(self, x, rng):
         mu,log_std = self.actor(x)
         act = self.reparameterize(mu, log_std, rng)
+        act = jnp.clip(act,-1,1)
         return act
     
     def reparameterize(self, mu, log_std, rng):
