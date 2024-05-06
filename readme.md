@@ -11,17 +11,23 @@ What have been done:
 - Implement the Naive Imitation Learning algorithm
     - Score: 131 (Walk), 53 (Run)
 - Implement the CQL-SAC algorithm
-    - Not so good, critic loss is too large, result in actor's behaviour nearly random
-    - in training, the critic looks like in self-excitation oscillation
+    - Score: 102 (Walk), 49 (Run)
+    - (problem) why log_std_max is around 300? too large
+        - when clip log_std into [-20,2], the training is more stable, alpha is higher, other metrics remain unchanged. but performance seems not better
+        - try state-independent log_std ? scale*tanh+bias?
+    - (future) try add random noise for better robustness
+    - (future) try early stop (at 300 epochs), see if the performance is better
+    - (solved) Not so good, critic loss is too large, result in actor's behaviour nearly random
+    - (solved) in training, the critic looks like in self-excitation oscillation
         - the game dynamics and expert traj are looped, which is bad for critic to learn
         - r + gamma Q=Q => Q=r/(1-gamma), which cause the Q value to be very large and meaningless
         - td error is very large: in terminal state, target value is super small, but the Q value is very large
         - in offline training, the model have no idea about the terminal state and timestep limit
         - **possible solution**: reward normalization
-    - when add tanh to output of actor, nan appear in around 30 epochs
+    - 
 
 What may be done in future:
-- Try to finetune the CQL-SAC algorithm, add some tricks to improve the performance
+- Continue to finetune the CQL-SAC algorithm, add some tricks to improve the performance
 - Try to implement model base methods
     - First try deterministic env model, train a ppo / sac 
     - If stochastic env model is needed, try to train a vae to predict the next state
