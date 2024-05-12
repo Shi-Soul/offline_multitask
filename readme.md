@@ -49,7 +49,11 @@ pip install clu #0.0.12
 pip install fire #0.6.0
 pip install wandb #0.16.6
 
-# Only for running stable-baselines3, not necessary
+# Only for running tianshou and stable-baselines3 for comparison, not necessary
+pip install tianshou
+pip install git+https://github.com/1nadequacy/dmc2gym.git
+    # in order to run opensource algo in dm_control env
+    # Weiji Xie:I have do some small modification to make it work
 pip install stable-baselines3[extra] #2.3.2 
 pip install imageio #
 ```
@@ -73,6 +77,8 @@ python train_cqlsac.py test
 
 
 ## Reference
+
+https://wandb.ai/
 
 https://gymnasium.farama.org/environments/mujoco/walker2d/
 

@@ -24,11 +24,11 @@ assert device.platform=="gpu"
 class Config():
     sac_config = {
         "gamma": 0.999,
-        "min_q_weight": 0.01,
+        "min_q_weight": 0.05,
         "num_act_samples": 30,
         "alpha_init": 0.02,
-        "lambda_critics": 1.0,
-        "entropy_target": 1.0,
+        "lambda_critics": 0.1,
+        "entropy_target": 0.5,
         "log_std_upper_bound": 2.0,
         "log_std_lower_bound": -20.0
     }
@@ -432,7 +432,7 @@ def train(exp_name="",SAMPLE_EXAMPLE=True,VERBOSE=1, USE_WANDB=True, TEST_AFTER_
         print("DEBUG: difference", loss)
         
     if TEST_AFTER_TRAIN:
-        test()
+        test(step = int(cfg.num_epochs/cfg.save_model_interval))
     
             
     ...

@@ -2,6 +2,7 @@ import dmc
 import glob
 import numpy as np
 import jax
+import tianshou
 from jax import numpy as jnp
 
 OBS_DIM = 24
@@ -69,7 +70,7 @@ def load_data(data_path):
     # print([(key, val.shape) for key,val in episodes[0].items()])
     return episodes
 
-def make_dataset(MAKE_SARSA=False):
+def make_dataset(MAKE_SARSA=False, ADD_TASKBIT=True):
     
     run_m = load_data("collected_data/walker_run-td3-medium/data")
     run_mr = load_data("collected_data/walker_run-td3-medium-replay/data")
@@ -93,7 +94,8 @@ def make_dataset(MAKE_SARSA=False):
         act = np.concatenate([traj['action'] for traj in dataset], axis=0)
         rew = np.concatenate([traj['reward'] for traj in dataset], axis=0)
         phy = np.concatenate([traj['physics'] for traj in dataset], axis=0)
-        obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
+        if ADD_TASKBIT:
+            obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
         dones = np.zeros_like(rew)
         dones[-1] = 1
         if not MAKE_SARSA:
@@ -110,7 +112,8 @@ def make_dataset(MAKE_SARSA=False):
                                         np.concatenate([traj['action'][1:], 
                                             np.zeros_like(traj['action'][:1])]
                                                     ,axis=0) for traj in dataset], axis=0)
-            obs_prime = np.concatenate([obs_prime, np.ones((obs_prime.shape[0],1))*bit], axis=1)
+            if ADD_TASKBIT:
+                obs_prime = np.concatenate([obs_prime, np.ones((obs_prime.shape[0],1))*bit], axis=1)
             
         #     obs_prime = np.concatenate([obs[1:], np.zeros_like(obs[:1])], axis=0)
         #     act_prime = np.concatenate([act[1:], np.zeros_like(act[:1])], axis=0)
@@ -139,6 +142,26 @@ def merge_dataset(*args):
         ret[key] = np.concatenate([dataset[key] for dataset in args], axis=0)
     return ret
 
+
+def load_buffer_dataset():
+    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=False)
+    # merge_data = merge_dataset(*data.values())
+    merge_data = merge_dataset(data['walk_mr'], data['walk_m'])
+    merge_data['rew'] = merge_data['rew'].flatten()
+    merge_data['done'] = merge_data.pop('dones').flatten() #merge_data['dones']
+    merge_data['terminated'] = merge_data['done']
+    merge_data['truncated'] = np.zeros_like(merge_data['done'])
+    merge_data['obs_next'] = merge_data.pop('obs_prime')
+    
+    merge_data.pop('act_prime')
+    print(merge_data.keys())
+    print([v.shape for v in merge_data.values()])
+    # buffer = tianshou.data.ReplayBuffer(1000)
+    # batch = tianshou.data.Batch(**merge_data)
+    buffer = tianshou.data.ReplayBuffer.from_data(**merge_data)
+    # buffer.add(batch)
+    return buffer
+
 def reward_normalize(dataset):
     # dataset: dict_keys(['obs', 'act', 'phy', 'rew'])
     rew = dataset['rew']
@@ -161,7 +184,12 @@ def train_test_split(data, test_size=0.2):
         test_data[key] = data[key][idx[n_train:]]
     return train_data, test_data
 
+def get_gym_env(task_name):
+    import dmc2gym
+    assert task_name in ["walk","run"], f"task_name should be 'walk' or 'run', but got {task_name}"
 
+    env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=1)
+    return env
 
 def eval_agent(agent, eval_episodes=100,seed=1):
 # Agent(24, 6)

@@ -3,6 +3,7 @@
 
 ckpt
 collected_data
+tslog
 *.pyc
 wandb
 *debug*
