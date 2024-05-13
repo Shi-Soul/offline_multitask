@@ -4,6 +4,7 @@
 ckpt
 collected_data
 tslog
+log
 *.pyc
 wandb
 *debug*

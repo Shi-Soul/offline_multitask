@@ -152,7 +152,7 @@ class DMCWrapper(core.Env):
     def seed(self, seed):
         if seed is None:
             return
-        print("Set seed:",seed)
+        # print("Set seed:",seed)
         self._env.task.random.seed(seed)
         self._true_action_space.seed(seed)
         self._norm_action_space.seed(seed)

@@ -22,6 +22,20 @@ from tianshou.utils.net.continuous import Actor, Critic
 from util import *
 
 
+def normalize_all_obs_in_replay_buffer(
+    replay_buffer: ReplayBuffer
+) -> Tuple[ReplayBuffer, RunningMeanStd]:
+    # compute obs mean and var
+    obs_rms = RunningMeanStd()
+    obs_rms.update(replay_buffer.obs)
+    _eps = np.finfo(np.float32).eps.item()
+    # normalize obs
+    replay_buffer._meta["obs"] = (replay_buffer.obs -
+                                  obs_rms.mean) / np.sqrt(obs_rms.var + _eps)
+    replay_buffer._meta["obs_next"] = (replay_buffer.obs_next -
+                                       obs_rms.mean) / np.sqrt(obs_rms.var + _eps)
+    return replay_buffer, obs_rms
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, default="walk")
@@ -199,9 +213,9 @@ def test_td3_bc():
     if not args.watch:
         # replay_buffer = load_buffer_d4rl(args.expert_data_task)
         replay_buffer = load_buffer_dataset()
-        # if args.norm_obs:
-        #     replay_buffer, obs_rms = normalize_all_obs_in_replay_buffer(replay_buffer)
-        #     test_envs.set_obs_rms(obs_rms)
+        if args.norm_obs:
+            replay_buffer, obs_rms = normalize_all_obs_in_replay_buffer(replay_buffer)
+            test_envs.set_obs_rms(obs_rms)
         # trainer
         result = offline_trainer(
             policy,
