@@ -7,14 +7,24 @@ Baseline
 - Random Policy Performance: 
     - walk 56, run 29
 
-What have been done:
-- Implement the Naive Imitation Learning algorithm
-    - Score: 173 (Walk), 67 (Run)
-- Implement the CQL-SAC algorithm
-    - Score: 102 (Walk), 49 (Run)
+| Method | walk(best) | run(best) |
+| -------- | -------- | -------- |
+| Expert Traj | 962.8321 | 318.36557 |
+| Random | 56 | 29 |
+| BC   | 173  | 67   |
+| CQL(ours)   | 102   | 49   |
+| CQL(tianshou)   | 200   | 200   |
+| TD3+BC(tianshou)   | 160   | ?   |
+| GAIL(tianshou)   | 160   | ?   |
+| ~~PPO(sb3,online)~~ | ? | ? |
+
+- (done) Implement  Naive Imitation Learning 
+- (done) Implement  CQL-SAC 
+    - (problem) which differences make tianshou CQL work?
     - (problem) why log_std_max is around 300? too large
         - when clip log_std into [-20,2], the training is more stable, alpha is higher, other metrics remain unchanged. but performance seems not better
         - try state-independent log_std ? scale*tanh+bias?
+    - (future) add more tricks to make it work.
     - (future) try add random noise for better robustness
     - (future) try early stop (at 300 epochs), see if the performance is better
     - (solved) Not so good, critic loss is too large, result in actor's behaviour nearly random
@@ -24,16 +34,15 @@ What have been done:
         - td error is very large: in terminal state, target value is super small, but the Q value is very large
         - in offline training, the model have no idea about the terminal state and timestep limit
         - **possible solution**: reward normalization
-    - 
+- (working) Implement Model base method
+    - Implemented MLP & VAE model.
+    - (problem) how to use the model?
+- (working) Implement Decision Transformer
+- (future) comparison experiments
+    - find best parameter for existing algorithms 
+    - does more data help?
+    - does adding noise help?
 
-What may be done in future:
-- [Finish] Continue to finetune the CQL-SAC algorithm, add some tricks to improve the performance
-    - 240, 238
-- Idea: Model base, IL (GAIL, ), Offline (CQL ), Data Visualization / Algo test
-    - Try Decision Tranformer 
-    - Try to implement model base methods
-        - First try deterministic env model, train a ppo / sac 
-        - If stochastic env model is needed, try to train a vae to predict the next state
 
 
 ## Usage
