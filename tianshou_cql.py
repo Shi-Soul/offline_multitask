@@ -48,7 +48,7 @@ def get_args():
     parser.add_argument("--eval-freq", type=int, default=1)
     parser.add_argument("--test-num", type=int, default=10)
     parser.add_argument("--logdir", type=str, default="tslog")
-    parser.add_argument("--render", type=float, default=1 / 35)
+    parser.add_argument("--render", type=float, default=None)
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
     )
@@ -190,6 +190,7 @@ def test_cql():
     else:  # wandb
         logger.load(writer)
 
+
     def save_best_fn(policy):
         torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
 
@@ -202,7 +203,8 @@ def test_cql():
         )
         policy.eval()
         collector = Collector(policy, env)
-        collector.collect(n_episode=1, render=1 / 35)
+        collector.collect(n_episode=1, render=args.render)
+        # collector.collect(n_episode=1, render=1 / 35)
 
     if not args.watch:
         replay_buffer = load_buffer_dataset()

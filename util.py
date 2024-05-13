@@ -70,7 +70,7 @@ def load_data(data_path):
     # print([(key, val.shape) for key,val in episodes[0].items()])
     return episodes
 
-def make_dataset(MAKE_SARSA=False, ADD_TASKBIT=True):
+def make_dataset(MAKE_SARSA=False, ADD_TASKBIT=True,DEAL_LAST="repeat"):
     
     run_m = load_data("collected_data/walker_run-td3-medium/data")
     run_mr = load_data("collected_data/walker_run-td3-medium-replay/data")
@@ -104,14 +104,40 @@ def make_dataset(MAKE_SARSA=False, ADD_TASKBIT=True):
         #     # FIXME:
         #     # Here we pad the last obs and act with zeros
         #     #   which may not be the best way to handle the last obs and act
-            obs_prime = np.concatenate([ 
-                                        np.concatenate([traj['observation'][1:], 
-                                            np.zeros_like(traj['observation'][:1])]
-                                                    ,axis=0) for traj in dataset], axis=0)
-            act_prime = np.concatenate([ 
-                                        np.concatenate([traj['action'][1:], 
-                                            np.zeros_like(traj['action'][:1])]
-                                                    ,axis=0) for traj in dataset], axis=0)
+            if DEAL_LAST=="pad":
+                obs_prime = np.concatenate([ 
+                                            np.concatenate([traj['observation'][1:], 
+                                                np.zeros_like(traj['observation'][:1])]
+                                                        ,axis=0) for traj in dataset], axis=0)
+                act_prime = np.concatenate([ 
+                                            np.concatenate([traj['action'][1:], 
+                                                np.zeros_like(traj['action'][:1])]
+                                                        ,axis=0) for traj in dataset], axis=0)
+            elif DEAL_LAST=="repeat":
+                # repeat last
+                obs_prime = np.concatenate([ 
+                                            np.concatenate([traj['observation'][1:], 
+                                                traj['observation'][-1:]]
+                                                        ,axis=0) for traj in dataset], axis=0)
+                act_prime = np.concatenate([
+                                            np.concatenate([traj['action'][1:], 
+                                                traj['action'][-1:]]
+                                                        ,axis=0) for traj in dataset], axis=0)
+            elif DEAL_LAST=="remove":
+                obs_prime = np.concatenate([
+                                            traj['observation'][1:] for traj in dataset],axis=0)
+                act_prime = np.concatenate([traj['action'][1:] for traj in dataset],axis=0)
+
+                obs = np.concatenate([traj['observation'][:-1] for traj in dataset], axis=0)
+                act = np.concatenate([traj['action'][:-1] for traj in dataset], axis=0)
+
+                if ADD_TASKBIT:
+                    obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
+            else:
+                raise NotImplementedError
+
+
+
             if ADD_TASKBIT:
                 obs_prime = np.concatenate([obs_prime, np.ones((obs_prime.shape[0],1))*bit], axis=1)
             
@@ -144,11 +170,12 @@ def merge_dataset(*args):
 
 
 def load_buffer_dataset():
-    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=False)
-    # merge_data = merge_dataset(*data.values())
-    merge_data = merge_dataset(data['walk_mr'], data['walk_m'])
+    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=True)
+    merge_data = merge_dataset(*data.values())
+    # merge_data = merge_dataset(data['run_mr'], data['run_m'])
+    # merge_data = merge_dataset(data['walk_mr'], data['walk_m'])
     merge_data['rew'] = merge_data['rew'].flatten()
-    merge_data['done'] = merge_data.pop('dones').flatten() #merge_data['dones']
+    merge_data['done'] = merge_data.pop('dones').flatten() 
     merge_data['terminated'] = merge_data['done']
     merge_data['truncated'] = np.zeros_like(merge_data['done'])
     merge_data['obs_next'] = merge_data.pop('obs_prime')
@@ -156,10 +183,7 @@ def load_buffer_dataset():
     merge_data.pop('act_prime')
     print(merge_data.keys())
     print([v.shape for v in merge_data.values()])
-    # buffer = tianshou.data.ReplayBuffer(1000)
-    # batch = tianshou.data.Batch(**merge_data)
     buffer = tianshou.data.ReplayBuffer.from_data(**merge_data)
-    # buffer.add(batch)
     return buffer
 
 def reward_normalize(dataset):
