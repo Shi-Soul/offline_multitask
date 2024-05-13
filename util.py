@@ -96,7 +96,7 @@ def make_dataset(MAKE_SARSA=False, ADD_TASKBIT=True,DEAL_LAST="repeat"):
         phy = np.concatenate([traj['physics'] for traj in dataset], axis=0)
         if ADD_TASKBIT:
             obs = np.concatenate([obs, np.ones((obs.shape[0],1))*bit], axis=1)
-        dones = np.zeros_like(rew)
+        dones = np.zeros_like(rew,dtype=np.int64)
         dones[-1] = 1
         if not MAKE_SARSA:
             return {'obs': obs, 'act': act, 'rew':rew, 'phy': phy, 'dones':dones}
@@ -208,11 +208,11 @@ def train_test_split(data, test_size=0.2):
         test_data[key] = data[key][idx[n_train:]]
     return train_data, test_data
 
-def get_gym_env(task_name):
+def get_gym_env(task_name, seed=1):
     import dmc2gym
     assert task_name in ["walk","run"], f"task_name should be 'walk' or 'run', but got {task_name}"
 
-    env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=1)
+    env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=seed)
     return env
 
 def eval_agent(agent, eval_episodes=100,seed=1):

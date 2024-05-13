@@ -91,3 +91,6 @@ https://flax.readthedocs.io/en/latest/index.html
 https://flax.readthedocs.io/en/latest/guides/training_techniques/dropout.html
 
 https://github.com/tinkoff-ai/CORL/blob/main/algorithms/offline/cql.py
+
+https://github.com/thu-ml/tianshou/
+
