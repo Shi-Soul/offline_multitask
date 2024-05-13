@@ -9,7 +9,7 @@ Baseline
 
 What have been done:
 - Implement the Naive Imitation Learning algorithm
-    - Score: 131 (Walk), 53 (Run)
+    - Score: 173 (Walk), 67 (Run)
 - Implement the CQL-SAC algorithm
     - Score: 102 (Walk), 49 (Run)
     - (problem) why log_std_max is around 300? too large
@@ -27,10 +27,13 @@ What have been done:
     - 
 
 What may be done in future:
-- Continue to finetune the CQL-SAC algorithm, add some tricks to improve the performance
-- Try to implement model base methods
-    - First try deterministic env model, train a ppo / sac 
-    - If stochastic env model is needed, try to train a vae to predict the next state
+- [Finish] Continue to finetune the CQL-SAC algorithm, add some tricks to improve the performance
+    - 240, 238
+- Idea: Model base, IL (GAIL, ), Offline (CQL ), Data Visualization / Algo test
+    - Try Decision Tranformer 
+    - Try to implement model base methods
+        - First try deterministic env model, train a ppo / sac 
+        - If stochastic env model is needed, try to train a vae to predict the next state
 
 
 ## Usage
@@ -51,9 +54,6 @@ pip install wandb #0.16.6
 
 # Only for running tianshou and stable-baselines3 for comparison, not necessary
 pip install tianshou
-pip install git+https://github.com/1nadequacy/dmc2gym.git
-    # in order to run opensource algo in dm_control env
-    # Weiji Xie:I have do some small modification to make it work
 pip install stable-baselines3[extra] #2.3.2 
 pip install imageio #
 ```
