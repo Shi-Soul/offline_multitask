@@ -1,6 +1,13 @@
+from typing import Any
 import dmc
 import glob
 import numpy as np
+import gymnasium as gym
+# import os
+# os.set_start_method('spawn')
+# import multiprocessing
+# multiprocessing.set_start_method('spawn')  
+from copy import deepcopy
 import jax
 import tianshou
 from jax import numpy as jnp
@@ -48,6 +55,25 @@ class DataLoader:
 
     def __len__(self):
         return self.data_len // self.batch_size
+
+class Gym2gymnasium(gym.Env):
+  def __init__(self, env):
+    super().__init__()
+    self.env = env
+    self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(25,), dtype=np.float64)
+    self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32)
+    
+
+  def __getattr__(self, __name: str) -> Any:
+    return getattr(self.env, __name)
+  
+  def reset(self, **kwargs) -> Any:
+    return self.env.reset(**kwargs)
+  def step(self, action):
+    return self.env.step(action)
+  def render(self):
+    raise NotImplementedError
+    # self.env.render()
 
 
 def load_data(data_path):
@@ -215,6 +241,54 @@ def get_gym_env(task_name, seed=1):
     env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=seed)
     return env
 
+def get_gymnasium_env(task_name, seed=1):
+    env = get_gym_env(task_name, seed=seed)
+    env = Gym2gymnasium(env)
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)
+    return env
+
+def eval_agent_fast(agent, eval_episodes=100,seed=1):
+    def evaluate_env_parallel(task_name, agent, seed):
+        HAS_ACT_VEC = hasattr(agent, 'act_vec')
+        if not HAS_ACT_VEC:
+            print("Warning: agent does not have act_vec method, will use act method instead")
+        eval_envs = [dmc.make(task_name, seed=seed+i) for i in range(eval_episodes)]
+        time_steps = [eval_env.reset() for eval_env in eval_envs]
+        cumulative_reward = [0 for _ in range(eval_episodes)]
+        while not jnp.all(jnp.stack([time_step.last() for time_step in time_steps])):
+            obs_vec = jnp.stack([time_step.observation for time_step in time_steps])
+            # shape: (eval_episodes, obs_dim)
+            # action = agent.act(time_step.observation)
+            if HAS_ACT_VEC:
+                act_vec = agent.act_vec(obs_vec)
+            else:
+                act_vec = [agent.act(obs) for obs in obs_vec]
+            
+            time_steps = [eval_env.step(act) for eval_env, act in zip(eval_envs, act_vec)]
+            cumulative_reward = [cumulative_reward[i] + time_step.reward for i, time_step in enumerate(time_steps)]
+        return cumulative_reward
+
+    def eval_agent_parallel(agent, eval_episodes=100, seed=1):
+        scores = {}
+        for i, task_name in enumerate(["walker_walk", "walker_run"]):
+            if agent.__class__.__name__ != 'Agent':
+                if "run" in task_name:
+                    task_bit = RUN_BIT
+                else:
+                    task_bit = WALK_BIT
+                agent.set_task_bit(task_bit)
+
+            # Use Ray to execute each evaluation episode in a separate process
+            score_res = evaluate_env_parallel(task_name,agent,seed)
+            scores[task_name] = sum(score_res) / eval_episodes
+            print(f"Task: {task_name}, Total Score: {score_res}")
+
+        for task_name in ["walker_walk", "walker_run"]:
+            print(f"Task: {task_name}, Score: {scores[task_name]}")
+        return scores
+    
+    return eval_agent_parallel(agent, eval_episodes=eval_episodes, seed=seed)
+
 def eval_agent(agent, eval_episodes=100,seed=1):
 # Agent(24, 6)
     def evaluate_env(eval_env, agent, eval_episodes):
@@ -238,7 +312,7 @@ def eval_agent(agent, eval_episodes=100,seed=1):
     for task_name in ["walker_walk", "walker_run"]:
         # seed = 42
         # if "run" in task_name:
-        if agent.__class__.__name__ == 'MLPAgent':
+        if agent.__class__.__name__ != 'Agent':
             if "run" in task_name:
                 task_bit = RUN_BIT
             else:

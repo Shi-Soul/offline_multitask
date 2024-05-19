@@ -61,6 +61,8 @@ pip install clu #0.0.12
 pip install fire #0.6.0
 pip install wandb #0.16.6
 
+pip install ray #2.22.0 # For fast eval, useless
+
 # Only for running tianshou and stable-baselines3 for comparison, not necessary
 pip install tianshou
 pip install stable-baselines3[extra] #2.3.2 
