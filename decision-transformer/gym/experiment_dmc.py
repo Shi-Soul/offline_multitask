@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import torch
 import wandb
+from tqdm import tqdm, trange
 
 import argparse
 import pickle
@@ -18,6 +19,7 @@ from decision_transformer.models.mlp_bc import MLPBCModel
 from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 import dmc2gym
+from util import *
 
 
 def discount_cumsum(x, gamma):
@@ -41,20 +43,22 @@ def experiment(
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'dmc_walk':
-        env = dmc.make('walker_walk', seed=1)
+        # env = dmc.make('walker_walk', seed=1)
         # env = dmc2gym.make(domain_name='walker', task_name='walk', seed=1)
+        env = get_gym_env('walk')
         max_ep_len = 1000
         env_targets = [3600, 1800]  # evaluation conditioning targets
         scale = 1000.  # normalization for rewards/returns
     elif env_name == 'dmc_run':
-        env = dmc.make('walker_run', seed=1)
+        # env = dmc.make('walker_run', seed=1)
         # env = dmc2gym.make(domain_name='walker', task_name='run', seed=1)
+        env = get_gym_env('run')
         max_ep_len = 1000
         env_targets = [5000, 2500]
         scale = 1000.
     else:
         raise NotImplementedError
-
+    # print('begin train')
     if model_type == 'bc':
         env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
@@ -62,6 +66,7 @@ def experiment(
     act_dim = env.action_space.shape[0]
 
     # load dataset
+    print('########### Loading Data ...... ###########')
     trajectories = []
     if env_name == 'dmc_walk':
         dataset_file_path = '../../collected_data/walker_walk-td3-medium/data'
@@ -77,7 +82,7 @@ def experiment(
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
-    for path_path in trajectories:
+    for path_path in tqdm(trajectories):
         data = np.load(path_path)
         path = {name: data[name] for name in data.files}
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
@@ -87,6 +92,7 @@ def experiment(
         traj_lens.append(len(path['observation']))
         returns.append(path['reward'].sum())
     traj_lens, returns = np.array(traj_lens), np.array(returns)
+    print('########### Data Loaded! ###########')
 
     # used for input normalization
     states = np.concatenate(states, axis=0)
@@ -284,7 +290,8 @@ def experiment(
         )
         # wandb.watch(model)  # wandb has some bug
 
-    for iter in range(variant['max_iters']):
+    print('########### Begin Training ...... ###########')
+    for iter in trange(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
         if log_to_wandb:
             wandb.log(outputs)

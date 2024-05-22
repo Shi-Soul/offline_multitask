@@ -2,7 +2,7 @@ import dmc
 import glob
 import numpy as np
 import jax
-import tianshou
+# import tianshou
 from jax import numpy as jnp
 
 OBS_DIM = 24
