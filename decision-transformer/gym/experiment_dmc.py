@@ -49,6 +49,7 @@ def experiment(
         max_ep_len = 1000
         env_targets = [3600, 1800]  # evaluation conditioning targets
         scale = 1000.  # normalization for rewards/returns
+        bit = 0
     elif env_name == 'dmc_run':
         # env = dmc.make('walker_run', seed=1)
         # env = dmc2gym.make(domain_name='walker', task_name='run', seed=1)
@@ -56,6 +57,7 @@ def experiment(
         max_ep_len = 1000
         env_targets = [5000, 2500]
         scale = 1000.
+        bit = 1
     else:
         raise NotImplementedError
     # print('begin train')
@@ -88,7 +90,9 @@ def experiment(
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['reward'][-1] = path['reward'].sum()
             path['reward'][:-1] = 0.
-        states.append(path['observation'])
+        # print(path['observation'].shape)
+        states.append(np.concatenate([path['observation'], np.ones((path['observation'].shape[0], 1)) * bit], axis=1))
+        # print(states[-1].shape)
         traj_lens.append(len(path['observation']))
         returns.append(path['reward'].sum())
     traj_lens, returns = np.array(traj_lens), np.array(returns)
@@ -145,6 +149,7 @@ def experiment(
             # get sequences from dataset
             traj['dones'] = np.zeros(len(traj['observation']))
             traj['dones'][-1] = 1
+            traj['observation'] = np.concatenate([traj['observation'], np.ones((traj['observation'].shape[0], 1)) * bit], axis=1)
             s.append(traj['observation'][si:si + max_len].reshape(1, -1, state_dim))
             a.append(traj['action'][si:si + max_len].reshape(1, -1, act_dim))
             r.append(traj['reward'][si:si + max_len].reshape(1, -1, 1))
@@ -248,6 +253,9 @@ def experiment(
         raise NotImplementedError
 
     model = model.to(device=device)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f'Total number of parameters: {total_params}')
+    print(model)
 
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
@@ -291,7 +299,7 @@ def experiment(
         # wandb.watch(model)  # wandb has some bug
 
     print('########### Begin Training ...... ###########')
-    for iter in trange(variant['max_iters']):
+    for iter in range(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
         if log_to_wandb:
             wandb.log(outputs)
@@ -304,7 +312,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=128)
     parser.add_argument('--n_layer', type=int, default=3)
@@ -314,12 +322,16 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=10000)
-    parser.add_argument('--num_eval_episodes', type=int, default=100)
+    parser.add_argument('--num_eval_episodes', type=int, default=10)
     parser.add_argument('--max_iters', type=int, default=10)
-    parser.add_argument('--num_steps_per_iter', type=int, default=10000)
+    parser.add_argument('--num_steps_per_iter', type=int, default=1000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
     
     args = parser.parse_args()
 
-    experiment('gym-experiment', variant=vars(args))
+    try:
+        experiment('gym-experiment', variant=vars(args))
+    except Exception as e:
+        print(e)
+        import pdb;pdb.post_mortem()

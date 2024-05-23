@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import trange
 
 
 def evaluate_episode(
@@ -32,7 +33,7 @@ def evaluate_episode(
     sim_states = []
 
     episode_return, episode_length = 0, 0
-    for t in range(max_ep_len):
+    for t in trange(max_ep_len):
 
         # add padding
         actions = torch.cat([actions, torch.zeros((1, act_dim), device=device)], dim=0)
@@ -82,7 +83,7 @@ def evaluate_episode_rtg(
     state_mean = torch.from_numpy(state_mean).to(device=device)
     state_std = torch.from_numpy(state_std).to(device=device)
 
-    state = env.reset()
+    state, _ = env.reset()
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
 
@@ -115,7 +116,8 @@ def evaluate_episode_rtg(
         actions[-1] = action
         action = action.detach().cpu().numpy()
 
-        state, reward, done, _ = env.step(action)
+        state, reward, done, _, _ = env.step(action)
+        # print('step done!!!')
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)

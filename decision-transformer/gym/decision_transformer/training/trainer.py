@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import trange
 
 import time
 
@@ -26,7 +27,7 @@ class Trainer:
         train_start = time.time()
 
         self.model.train()
-        for _ in range(num_steps):
+        for _ in trange(num_steps):
             train_loss = self.train_step()
             train_losses.append(train_loss)
             if self.scheduler is not None:
