@@ -9,7 +9,7 @@ import gymnasium as gym
 # multiprocessing.set_start_method('spawn')  
 from copy import deepcopy
 import jax
-import tianshou
+# import tianshou
 from jax import numpy as jnp
 
 OBS_DIM = 24
