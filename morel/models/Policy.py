@@ -432,8 +432,8 @@ class PPO2():
 
     def train(self, env, optimizer = torch.optim.Adam,
                         lr =  0.00027,
-                        n_steps = 128,
-                        time_steps = 1e5,
+                        n_steps = 512,
+                        time_steps = 1e6,
                         clip_range = 0.2,
                         entropy_coef = 0.01,
                         value_coef = 0.5,

@@ -25,8 +25,9 @@ class Morel():
         self.policy = PPO2(obs_dim, action_dim)
 
     def train(self, dataloader, dynamics_data):
+        n_simulated_steps=64
         dynamics_train_epochs = 10
-        uncertain_penalty = -50.0
+        uncertain_penalty = -20.0
         loss_fn = nn.HuberLoss
 
         self.dynamics_data = dynamics_data
@@ -34,7 +35,9 @@ class Morel():
         print("---------------- Beginning Dynamics Training ----------------")
         self.dynamics.train(dataloader, epochs = dynamics_train_epochs,loss=loss_fn, summary_writer = self.tensorboard_writer, comet_experiment = self.comet_experiment)
         print("---------------- Ending Dynamics Training ----------------")
-
+        if self.comet_experiment is not None:
+            self.comet_experiment.log_metric('n_simulated_steps', n_simulated_steps)
+            
         env = FakeEnv(self.dynamics,
                             self.dynamics_data.observation_mean,
                             self.dynamics_data.observation_std,
@@ -47,7 +50,9 @@ class Morel():
                             self.dynamics_data.initial_obs_mean,
                             self.dynamics_data.initial_obs_std,
                             self.dynamics_data.source_observation,
-                            uncertain_penalty=uncertain_penalty)
+                            uncertain_penalty=uncertain_penalty,
+                            timeout_steps=n_simulated_steps,
+                            )
 
         print("---------------- Beginning Policy Training ----------------")
         self.policy.train(env,
@@ -63,7 +68,7 @@ class Morel():
         print("---------------- Beginning Policy Evaluation ----------------")
         total_rewards = []
         for i in tqdm(range(30)):
-            _, _, _, _, _, _, _, info = self.policy.generate_experience(env, 1000, 1.0, 1.0)
+            _, _, _, _, _, _, _, info = self.policy.generate_experience(env, 1024, 1.0, 1.0)
             total_rewards.extend(info["episode_rewards"])
 
             if(self.tensorboard_writer is not None):

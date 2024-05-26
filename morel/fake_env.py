@@ -17,7 +17,7 @@ class FakeEnv:
                         initial_obs_mean,
                         initial_obs_std,
                         start_states,
-                        timeout_steps = 300,
+                        timeout_steps = 128,
                         uncertain_penalty = -100,
                         device = "cuda:0"):
         self.dynamics_model = dynamics_model

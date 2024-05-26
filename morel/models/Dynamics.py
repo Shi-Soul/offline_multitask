@@ -42,7 +42,7 @@ class DynamicsNet(nn.Module):
         return  x
 
 class DynamicsEnsemble():
-    def __init__(self, input_dim, output_dim, n_models = 4, n_neurons = 256, threshold = 2.5, n_layers = 2, activation = nn.SiLU, cuda = True):
+    def __init__(self, input_dim, output_dim, n_models = 4, n_neurons = 256, threshold = 2.8, n_layers = 2, activation = nn.SiLU, cuda = True):
         self.n_models = n_models
         self.n_neurons = n_neurons
         self.n_layers = n_layers
@@ -90,7 +90,7 @@ class DynamicsEnsemble():
         return output
 
 
-    def train(self, dataloader, epochs = 5, loss = nn.MSELoss, summary_writer = None, comet_experiment = None):
+    def train(self, dataloader, epochs, loss, summary_writer = None, comet_experiment = None):
         dynamics_lr_start = 1e-4
         dynamics_lr_end = 1e-6
         hyper_params = {
