@@ -67,6 +67,9 @@ pip install ray #2.22.0 # For fast eval, useless
 pip install tianshou
 pip install stable-baselines3[extra] #2.3.2 
 pip install imageio #
+
+# for morel
+pip install comet_ml  #3.42.1
 ```
 
 ```bash
@@ -83,6 +86,8 @@ python train_il.py train
 python train_il.py test
 python train_cqlsac.py train
 python train_cqlsac.py test
+
+CUDA_VISIBLE_DEVICES=1 python train_morel.py --comet_api wye3SgI6S0uSJyf5Mc54R0DTr 
 ```
 
 
