@@ -12,7 +12,7 @@ class ActorCriticPolicy(nn.Module):
     def __init__(self, input_dim,
                 output_dim,
                 n_neurons = 64,
-                activation = nn.Tanh,
+                activation = nn.SiLU,
                 distribution = torch.distributions.multivariate_normal.MultivariateNormal):
         # Validate inputs
         assert input_dim > 0
@@ -27,42 +27,45 @@ class ActorCriticPolicy(nn.Module):
         self.n_neurons = n_neurons
         self.distribution = distribution
 
-        # Policy Network
-        self.h0 = nn.Linear(input_dim, n_neurons)
-        self.h0_act = activation()
-        self.h1 = nn.Linear(n_neurons, n_neurons)
-        self.h1_act = activation()
-        self.output_layer = nn.Linear(n_neurons, output_dim)
-
-        # Value Network
-        self.h0v = nn.Linear(input_dim, n_neurons)
-        self.h0_actv = activation()
-        self.h1v = nn.Linear(n_neurons, n_neurons)
-        self.h1_actv = activation()
+        self.in_layer = nn.Sequential(
+            nn.Linear(input_dim, n_neurons), nn.LayerNorm(n_neurons),activation(),
+        )
+        self.mid_list = nn.ModuleList()
+        for _ in range(2):
+            self.mid_list.append(nn.Sequential(
+                nn.Linear(n_neurons, n_neurons), nn.LayerNorm(n_neurons), activation()
+            ))
         self.value_head = nn.Linear(n_neurons, 1)
+        self.mean_head = nn.Sequential(
+            nn.Linear(n_neurons, output_dim), nn.Tanh()
+        )
+
+#         # Policy Network
+#         self.h0 = nn.Linear(input_dim, n_neurons)
+#         self.h0_act = activation()
+#         self.h1 = nn.Linear(n_neurons, n_neurons)
+#         self.h1_act = activation()
+#         self.output_layer = nn.Linear(n_neurons, output_dim)
+# 
+#         # Value Network
+#         self.h0v = nn.Linear(input_dim, n_neurons)
+#         self.h0_actv = activation()
+#         self.h1v = nn.Linear(n_neurons, n_neurons)
+#         self.h1_actv = activation()
+#         self.value_head = nn.Linear(n_neurons, 1)
 
         self.var = torch.nn.Parameter(torch.zeros(output_dim).cuda(), requires_grad = True)
-        # self.var = torch.nn.Parameter(torch.tensor([0.0,0.0]).cuda(), requires_grad = True)
 
         self.mean_activation = nn.Tanh()
-        # self.var_activation = nn.Softplus()
 
     def forward(self, obs, action = None):
-        # Policy Forward Pass
-        x = self.h0(obs)
-        x = self.h0_act(x)
-        x = self.h1(x)
-        x = self.h1_act(x)
-        action_logit = self.output_layer(x)
-
-        # Generate action distribution
-        #TODO Add Support for additional distributions
-        mean = action_logit[:,0:self.output_dim]
+        x = self.in_layer(obs)
+        for layer in self.mid_list:
+            x = layer(x)+x
+        mean = self.mean_head(x)
         var = torch.exp(self.var)
         action_dist = self.distribution(mean, torch.diag_embed(var))
 
-        # Sample action if not passed as argument to function
-        # Action is passed when doing policy updates
         if action is None:
             action = action_dist.sample()
 
@@ -70,10 +73,6 @@ class ActorCriticPolicy(nn.Module):
         entropy = action_dist.entropy()
 
         # Value Forward Pass
-        x = self.h0v(obs)
-        x = self.h0_actv(x)
-        x = self.h1v(x)
-        x = self.h1_actv(x)
         value = self.value_head(x)
         value = torch.squeeze(value)
 
@@ -193,7 +192,7 @@ class PPO2():
         self.output_dim = output_dim
 
         # Instantiate Actor Critic Policy
-        self.policy = network(input_dim, output_dim, n_neurons=64).to(self.device)
+        self.policy = network(input_dim, output_dim, n_neurons=96).to(self.device)
 
     def forward(self, observation, action = None):
         """Performs a forward pass using the policy network

@@ -36,7 +36,9 @@ class Morel():
         self.dynamics.train(dataloader, epochs = dynamics_train_epochs,loss=loss_fn, summary_writer = self.tensorboard_writer, comet_experiment = self.comet_experiment)
         print("---------------- Ending Dynamics Training ----------------")
         if self.comet_experiment is not None:
-            self.comet_experiment.log_metric('n_simulated_steps', n_simulated_steps)
+            self.comet_experiment.log_parameter({
+                'n_simulated_steps': n_simulated_steps
+            })
             
         env = FakeEnv(self.dynamics,
                             self.dynamics_data.observation_mean,
