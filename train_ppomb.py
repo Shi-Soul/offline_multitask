@@ -62,17 +62,20 @@ class MLPModelGymEnv(VecEnv):
         # (N, A) => (N, O), (N, ), (N, ), (N, ), [{},{},...]
         # obs, reward, done, truncated, info
         self._steps +=1
-        if self._steps >= self.n_pred_step:
-            done=True
-        else:
-            done=False
+        info = [{} for i in range(self.N)]
             
         model_output = self.model.apply_fn({'params': self.model.params},self._state, jnp.array(action))
         # O + 1(rewards)
         obs = model_output[:, :-1]
         self._state = obs
         reward = np.array(model_output[:, -1])
-        return np.array(obs), reward, np.zeros_like(reward,dtype=np.bool_)*done, {}
+        if self._steps >= self.n_pred_step:
+            done=True
+        else:
+            done=False
+            for i in range(self.N):
+                info[i]["terminal_observation"]=np.array(obs[i])
+        return np.array(obs), reward, np.ones_like(reward,dtype=np.bool_)*done, info
         # return obs, reward, np.zeros_like(reward,dtype=np.bool_)*done, np.zeros_like(reward,dtype=np.bool_), {}
         # return obs.squeeze(), reward[0], done, False, {}
     
@@ -148,6 +151,19 @@ class MLPModelGymEnv(VecEnv):
         """
         raise NotImplementedError()
 
+def run_test(env,model):
+    obs = env.reset()
+    sum_reward = 0
+    for i in range(1000):
+        # print(obs,obs.shape)
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        # obs, reward, done, truncated, info = env.step(action)
+        if done.all():
+            # obs = env.reset()
+            obs= env.reset()
+        sum_reward += reward
+    return sum_reward
         
 def train():
     np.random.seed(SEED)
@@ -162,32 +178,21 @@ def train():
     state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','mb'), target=state)
     state = jax.device_put(state, device)
     
-    env = MLPModelGymEnv(state, merge_data, num_steps=100, num_envs=16)
+    env = MLPModelGymEnv(state, merge_data, num_steps=10, num_envs=16)
     
+    realenv = make_vec_env(env_id = lambda:get_gymnasium_env("walk"), n_envs=16)
     
     # Initialize the agent
     model = PPO("MlpPolicy", env, verbose=1, n_steps=256)
-    # model.learn(total_timesteps=50000, progress_bar=True)
-    # model.save("ppomb/base")
-
-    # Test In Model Env
-    def run_test(env):
-        obs = env.reset()
-        sum_reward = 0
-        for i in range(1000):
-            # print(obs,obs.shape)
-            action, _states = model.predict(obs, deterministic=True)
-            obs, reward, done, info = env.step(action)
-            # obs, reward, done, truncated, info = env.step(action)
-            if done.all():
-                # obs = env.reset()
-                obs= env.reset()
-            sum_reward += reward
-        return sum_reward
-    print("The Model thinks how good the policy is ", run_test(env))
+    print("Before Training: The Model thinks how good the policy is ", run_test(env,model))
+    print("Before Training: The Real Env thinks how good the policy is ", run_test(realenv,model))
     
-    realenv = make_vec_env(env_id = lambda:get_gymnasium_env("walk"), n_envs=16)
-    print("The Real Env thinks how good the policy is ", run_test(realenv))
+
+    model.learn(total_timesteps=1000000, progress_bar=True)
+    model.save("ppomb/base")
+
+    print("After  Training: The Model thinks how good the policy is ", run_test(env,model))
+    print("After  Training: The Real Env thinks how good the policy is ", run_test(realenv,model))
     
     
     

@@ -18,4 +18,5 @@ class Agent:
 
 # make_dataset()
 
-eval_agent(Agent(24, 6), eval_episodes=10,seed=1)
+eval_agent_fast(Agent(24, 6), eval_episodes=10,seed=1)
+# eval_agent(Agent(24, 6), eval_episodes=10,seed=1)

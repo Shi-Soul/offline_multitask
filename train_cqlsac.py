@@ -82,6 +82,16 @@ class CQLSACAgent:
                                           method="action")
         return np.array(action[0]).squeeze()
     
+    def act_vec(self,state):
+        assert state.shape[1] == self.state_dim and len(state.shape) == 2, f"Invalid state shape {state.shape}"
+        self.rng, rng = random.split(self.rng)
+        state = np.concatenate([state, np.ones((state.shape[0],1))*self.task_bit], axis=1)
+        state = jax.device_put(state, device)
+        action = self.modelstate.apply_fn({'params': self.modelstate.params}, state, rng,
+                                            method="action")
+        return np.array(action)
+        
+    
     def load(self, load_path):
         pass
 
@@ -450,7 +460,8 @@ def test(step=0):
     state = jax.device_put(state, device)
     
     agent = CQLSACAgent(state, OBS_DIM, ACT_DIM, rng=rng3)
-    eval_agent(agent, eval_episodes=5,seed=SEED)
+    eval_agent_fast(agent, eval_episodes=5,seed=SEED)
+    # eval_agent(agent, eval_episodes=5,seed=SEED)
     
 
 if __name__=="__main__":
