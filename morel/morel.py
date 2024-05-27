@@ -26,7 +26,7 @@ class Morel():
         self.policy = PPO2(obs_dim, action_dim)
 
     def train(self, dataloader, dynamics_data, load_dynamics: Optional[str] =None):
-        n_simulated_steps=32
+        n_simulated_steps=128
         dynamics_train_epochs = 10
         uncertain_penalty = -20.0
         loss_fn = nn.HuberLoss
@@ -100,6 +100,4 @@ class Morel():
     def load(self, load_dir):
         self.policy.load(load_dir)
         self.dynamics.load(load_dir)
-
-
 

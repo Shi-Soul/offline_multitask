@@ -87,7 +87,7 @@ python train_il.py test
 python train_cqlsac.py train
 python train_cqlsac.py test
 
-CUDA_VISIBLE_DEVICES=1 python train_morel.py --comet_api wye3SgI6S0uSJyf5Mc54R0DTr 
+CUDA_VISIBLE_DEVICES=0 python train_morel.py --comet_api wye3SgI6S0uSJyf5Mc54R0DTr --exp_name v2_t3.2_n32
 ```
 
 

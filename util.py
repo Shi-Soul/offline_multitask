@@ -11,13 +11,21 @@ from copy import deepcopy
 import jax
 # import tianshou
 from jax import numpy as jnp
-
+import time
 OBS_DIM = 24
 ACT_DIM = 6
 RUN_BIT = 1
 WALK_BIT = 0
 
-
+class Timer():
+    def __enter__(self):
+        self.start = time.time()
+        return self
+    def __exit__(self, *args):
+        self.end = time.time()
+        self.interval = self.end - self.start
+    
+    
 class DataLoader:
     def __init__(self, data:dict, batch_size=32, random_noise=-1, device=None):
         self.data = data

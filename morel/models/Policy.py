@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from morel.fake_env import FakeEnv
 # from torchviz import make_dot
-
+from util import Timer
 import numpy as np
 from tqdm import tqdm
 import os
@@ -396,6 +396,7 @@ class PPO2():
         self.policy.train()
         with torch.set_grad_enabled(True):
             # Feed batch through policy network
+            
             actions, neg_log_probs, entropies, values = self.forward(obs, action = old_actions)
 
             loss, pg_loss, value_loss, entropy_mean, approx_kl = self.loss(clip_range,
@@ -416,17 +417,17 @@ class PPO2():
 
 
     def train(self, env, optimizer = torch.optim.Adam,
-                        lr =  0.00027,
+                        lr =  2.7e-4,
                         n_steps = 512,
                         time_steps = 1e6,
                         clip_range = 0.2,
                         entropy_coef = 0.01,
-                        value_coef = 0.5,
+                        value_coef = 0.1,
                         num_batches = 4,
                         gamma = 0.99,
                         lam = 0.95,
-                        max_grad_norm = 0.5,
-                        num_train_epochs = 4,
+                        max_grad_norm = 2.0,
+                        num_train_epochs = 30,
                         comet_experiment = None,
                         summary_writer = None,
                         render = False):
@@ -484,43 +485,46 @@ class PPO2():
         # main train loop
         for update in tqdm(range(n_updates)):
             # Collect new experiences using the current policy
-            rewards, obs, returns, dones, actions, values, neg_log_probs, info = self.generate_experience(env, n_steps, gamma, lam)
-            indices = np.arange(n_steps)
+            with Timer() as t_sim:
+                rewards, obs, returns, dones, actions, values, neg_log_probs, info = self.generate_experience(env, n_steps, gamma, lam)
+                indices = np.arange(n_steps)
+                
 
             # Loop over train epochs
-            for i in range(num_train_epochs):
-                # Shuffle order of data
-                np.random.shuffle(indices)
+            with Timer() as t_ppo_train:
+                for i in range(num_train_epochs):
+                    # Shuffle order of data
+                    np.random.shuffle(indices)
 
-                # Calculate size of each batch
-                batch_size = n_steps // num_batches
+                    # Calculate size of each batch
+                    batch_size = n_steps // num_batches
 
-                # If not evenly divisible, add 1 sample to each batch, last batch will automatically be smaller
-                if(n_steps % num_batches):
-                    batch_size +=1
+                    # If not evenly divisible, add 1 sample to each batch, last batch will automatically be smaller
+                    if(n_steps % num_batches):
+                        batch_size +=1
 
-                # Loop over batches in single epoch
-                for batch_num in range(num_batches):
-                    # Reset gradients
-                    self.policy.zero_grad()
+                    # Loop over batches in single epoch
+                    for batch_num in range(num_batches):
+                        # Reset gradients
+                        self.policy.zero_grad()
 
-                    # Get indices for batch
-                    if(batch_num != num_batches - 1):
-                        batch_indices = indices[batch_num*batch_size:(batch_num + 1)*batch_size]
-                    else:
-                        batch_indices = indices[batch_num*batch_size:]
+                        # Get indices for batch
+                        if(batch_num != num_batches - 1):
+                            batch_indices = indices[batch_num*batch_size:(batch_num + 1)*batch_size]
+                        else:
+                            batch_indices = indices[batch_num*batch_size:]
 
-                    # Generate batch
-                    batch = (arr[batch_indices] for arr in (obs, returns, dones, actions, values, neg_log_probs))
+                        # Generate batch
+                        batch = (arr[batch_indices] for arr in (obs, returns, dones, actions, values, neg_log_probs))
 
-                    # Run train step on batch
-                    loss, pg_loss, value_loss, entropy, approx_kl = self.train_step(clip_range, entropy_coef, value_coef, *batch)
+                        # Run train step on batch
+                        loss, pg_loss, value_loss, entropy, approx_kl = self.train_step(clip_range, entropy_coef, value_coef, *batch)
 
-                    # Clip gradients
-                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_grad_norm)
+                        # Clip gradients
+                        grad_norm = torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_grad_norm)
 
-                    # Run optimizer step
-                    self.policy_optim.step()
+                        # Run optimizer step
+                        self.policy_optim.step()
 
             # Tensorboard
             if(summary_writer is not None):
@@ -540,8 +544,11 @@ class PPO2():
                 comet_experiment.log_metric('value_loss', value_loss, step = update*n_steps)
                 comet_experiment.log_metric('entropy_loss', entropy, step = update*n_steps)
                 comet_experiment.log_metric('approx_kl', approx_kl, step = update*n_steps)
+                comet_experiment.log_metric('grad_norm', grad_norm.cpu().item(), step = update*n_steps)
                 comet_experiment.log_metric('episode_reward', sum(info["episode_rewards"])/len(info["episode_rewards"]), step = update*n_steps)
                 comet_experiment.log_metric('halt_per_episode', info["HALT"]/len(info["episode_rewards"]), step = update*n_steps)
+                comet_experiment.log_metric('sim_time', t_sim.interval, step = update*n_steps)
+                comet_experiment.log_metric('ppo_train_time', t_ppo_train.interval, step = update*n_steps)
 
 
     def loss(self, clip_range,
