@@ -13,7 +13,9 @@ class ActorCriticPolicy(nn.Module):
                 output_dim,
                 n_neurons = 64,
                 activation = nn.SiLU,
-                distribution = torch.distributions.multivariate_normal.MultivariateNormal):
+                distribution = torch.distributions.multivariate_normal.MultivariateNormal,
+                init_logvar = -1,
+                ):
         # Validate inputs
         assert input_dim > 0
         assert output_dim > 0
@@ -40,7 +42,7 @@ class ActorCriticPolicy(nn.Module):
             nn.Linear(n_neurons, output_dim), nn.Tanh()
         )
 
-        self.var = torch.nn.Parameter(torch.zeros(output_dim).cuda(), requires_grad = True)
+        self.var = torch.nn.Parameter(torch.zeros(output_dim).cuda()+init_logvar, requires_grad = True)
 
         self.mean_activation = nn.Tanh()
 
@@ -178,7 +180,7 @@ class PPO2():
         self.output_dim = output_dim
 
         # Instantiate Actor Critic Policy
-        self.policy = network(input_dim, output_dim, n_neurons=96).to(self.device)
+        self.policy = network(input_dim, output_dim, n_neurons=128).to(self.device)
 
     def forward(self, observation, action = None):
         """Performs a forward pass using the policy network
@@ -399,7 +401,7 @@ class PPO2():
             
             actions, neg_log_probs, entropies, values = self.forward(obs, action = old_actions)
 
-            loss, pg_loss, value_loss, entropy_mean, approx_kl = self.loss(clip_range,
+            loss, pg_loss, value_loss, entropy_mean, approx_kl, clip_ratio = self.loss(clip_range,
                                                                             entropy_coef,
                                                                             value_coef,
                                                                             returns,
@@ -413,15 +415,15 @@ class PPO2():
             # Backprop from loss
             loss.backward()
 
-            return loss, pg_loss, value_loss, entropy_mean, approx_kl
+            return loss, pg_loss, value_loss, entropy_mean, approx_kl, clip_ratio
 
 
     def train(self, env, optimizer = torch.optim.Adam,
-                        lr =  2.7e-4,
+                        lr =  3e-5,
                         n_steps = 512,
                         time_steps = 1e6,
                         clip_range = 0.2,
-                        entropy_coef = 0.01,
+                        entropy_coef = 1e-4,
                         value_coef = 0.1,
                         num_batches = 4,
                         gamma = 0.99,
@@ -491,6 +493,13 @@ class PPO2():
                 
 
             # Loop over train epochs
+            cum_loss = 0
+            cum_pgloss = 0
+            cum_vloss = 0   
+            cum_entropy = 0
+            cum_kl = 0 
+            cum_grad = 0
+            cum_clip_ratio = 0
             with Timer() as t_ppo_train:
                 for i in range(num_train_epochs):
                     # Shuffle order of data
@@ -518,10 +527,17 @@ class PPO2():
                         batch = (arr[batch_indices] for arr in (obs, returns, dones, actions, values, neg_log_probs))
 
                         # Run train step on batch
-                        loss, pg_loss, value_loss, entropy, approx_kl = self.train_step(clip_range, entropy_coef, value_coef, *batch)
+                        loss, pg_loss, value_loss, entropy, approx_kl, clip_ratio = self.train_step(clip_range, entropy_coef, value_coef, *batch)
 
                         # Clip gradients
                         grad_norm = torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_grad_norm)
+                        cum_loss+=loss
+                        cum_entropy += entropy
+                        cum_pgloss += pg_loss
+                        cum_vloss += value_loss
+                        cum_kl += approx_kl
+                        cum_grad += grad_norm
+                        cum_clip_ratio+=clip_ratio
 
                         # Run optimizer step
                         self.policy_optim.step()
@@ -539,12 +555,13 @@ class PPO2():
 
             # Comet
             if(comet_experiment is not None):
-                comet_experiment.log_metric('total_loss', loss, step = update*n_steps)
-                comet_experiment.log_metric('policy_loss', pg_loss, step = update*n_steps)
-                comet_experiment.log_metric('value_loss', value_loss, step = update*n_steps)
-                comet_experiment.log_metric('entropy_loss', entropy, step = update*n_steps)
-                comet_experiment.log_metric('approx_kl', approx_kl, step = update*n_steps)
-                comet_experiment.log_metric('grad_norm', grad_norm.cpu().item(), step = update*n_steps)
+                comet_experiment.log_metric('total_loss', (cum_loss)/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('policy_loss', cum_pgloss/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('value_loss', cum_vloss/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('entropy', cum_entropy/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('approx_kl', cum_kl/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('grad_norm', cum_grad/num_train_epochs/num_batches, step = update*n_steps)
+                comet_experiment.log_metric('clip_ratio', cum_clip_ratio/num_train_epochs/num_batches, step = update*n_steps)
                 comet_experiment.log_metric('episode_reward', sum(info["episode_rewards"])/len(info["episode_rewards"]), step = update*n_steps)
                 comet_experiment.log_metric('halt_per_episode', info["HALT"]/len(info["episode_rewards"]), step = update*n_steps)
                 comet_experiment.log_metric('sim_time', t_sim.interval, step = update*n_steps)
@@ -598,6 +615,8 @@ class PPO2():
         ## Policy loss ##
         ratios = torch.exp(old_neg_log_probs - neg_log_probs)
 
+        clip_ratio = torch.mean( ((ratios<1-clip_range) | (ratios>1+clip_range)).to(torch.float) ).item()
+
         pg_losses1 = -advantages * ratios
         pg_losses2 = -advantages * torch.clamp(ratios, 1.0 - clip_range, 1.0 + clip_range)
 
@@ -609,7 +628,7 @@ class PPO2():
         ## Total Loss ##
         loss = pg_loss - (entropy_loss * entropy_coef) + (value_loss * value_coef)
 
-        return loss, pg_loss, value_loss, entropy_loss, approx_kl
+        return loss, pg_loss, value_loss, entropy_loss, approx_kl, clip_ratio
 
     def save(self, save_dir):
         torch.save(self.policy.state_dict(), os.path.join(save_dir, "policy.pt"))

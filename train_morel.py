@@ -37,6 +37,7 @@ class Maze2DDataset(Dataset):
         
         data = make_dataset(False,True)
         dataset = merge_dataset(data['walk_mr'],data['walk_m'])
+        # dataset = merge_dataset(data['walk_mr'],data['walk_m'])
 
         # Input data
         self.source_observation = dataset["obs"][:-1]
