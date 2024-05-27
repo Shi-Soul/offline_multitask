@@ -13,7 +13,7 @@ Baseline
 | Random | 56 | 29 |
 | BC   | 173  | 67   |
 | CQL(ours)   | 102   | 49   |
-| CQL(tianshou)   | 200   | 200   |
+| CQL(tianshou)   | 205.78   | 76.17   |
 | TD3+BC(tianshou)   | 160   | ?   |
 | GAIL(tianshou)   | 160   | ?   |
 | ~~PPO(sb3,online)~~ | ? | ? |
