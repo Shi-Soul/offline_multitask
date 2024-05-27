@@ -40,20 +40,6 @@ class ActorCriticPolicy(nn.Module):
             nn.Linear(n_neurons, output_dim), nn.Tanh()
         )
 
-#         # Policy Network
-#         self.h0 = nn.Linear(input_dim, n_neurons)
-#         self.h0_act = activation()
-#         self.h1 = nn.Linear(n_neurons, n_neurons)
-#         self.h1_act = activation()
-#         self.output_layer = nn.Linear(n_neurons, output_dim)
-# 
-#         # Value Network
-#         self.h0v = nn.Linear(input_dim, n_neurons)
-#         self.h0_actv = activation()
-#         self.h1v = nn.Linear(n_neurons, n_neurons)
-#         self.h1_actv = activation()
-#         self.value_head = nn.Linear(n_neurons, 1)
-
         self.var = torch.nn.Parameter(torch.zeros(output_dim).cuda(), requires_grad = True)
 
         self.mean_activation = nn.Tanh()

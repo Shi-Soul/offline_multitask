@@ -3,7 +3,8 @@ from numpy.lib.npyio import save
 from morel.models.Dynamics import DynamicsEnsemble
 from morel.models.Policy import PPO2
 from morel.fake_env import FakeEnv
-
+from comet_ml import Experiment
+from typing import Optional
 import numpy as np
 from tqdm import tqdm
 import os
@@ -17,15 +18,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Morel():
-    def __init__(self, obs_dim, action_dim, tensorboard_writer = None, comet_experiment = None):
+    def __init__(self, obs_dim, action_dim, tensorboard_writer = None, comet_experiment: Experiment= None):
         self.tensorboard_writer = tensorboard_writer
         self.comet_experiment = comet_experiment
 
         self.dynamics = DynamicsEnsemble(obs_dim + action_dim, obs_dim+1)
         self.policy = PPO2(obs_dim, action_dim)
 
-    def train(self, dataloader, dynamics_data):
-        n_simulated_steps=64
+    def train(self, dataloader, dynamics_data, load_dynamics: Optional[str] =None):
+        n_simulated_steps=32
         dynamics_train_epochs = 10
         uncertain_penalty = -20.0
         loss_fn = nn.HuberLoss
@@ -33,12 +34,13 @@ class Morel():
         self.dynamics_data = dynamics_data
 
         print("---------------- Beginning Dynamics Training ----------------")
-        self.dynamics.train(dataloader, epochs = dynamics_train_epochs,loss=loss_fn, summary_writer = self.tensorboard_writer, comet_experiment = self.comet_experiment)
+        if load_dynamics is not None:
+            self.dynamics.load(load_dynamics)
+        else:
+            self.dynamics.train(dataloader, epochs = dynamics_train_epochs,loss=loss_fn, summary_writer = self.tensorboard_writer, comet_experiment = self.comet_experiment)
         print("---------------- Ending Dynamics Training ----------------")
         if self.comet_experiment is not None:
-            self.comet_experiment.log_parameter({
-                'n_simulated_steps': n_simulated_steps
-            })
+            self.comet_experiment.log_parameter('n_simulated_steps',n_simulated_steps)
             
         env = FakeEnv(self.dynamics,
                             self.dynamics_data.observation_mean,

@@ -115,6 +115,7 @@ def main(args):
             cur_count = len(glob.glob(run_log_dir + "_*"))
             run_log_dir = run_log_dir + "_" + str(cur_count)
         os.mkdir(run_log_dir)
+        print("Logging to: ", run_log_dir)
 
         # Create tensorboard writer if requested
 
@@ -143,9 +144,10 @@ def main(args):
 
     agent = Morel(OBS_DIM+1, ACT_DIM, tensorboard_writer = tensorboard_writer, comet_experiment = comet_experiment)
 
-    agent.train(dataloader, dynamics_data)
+    agent.train(dataloader, dynamics_data, load_dynamics="/home/wjxie/wjxie/env/offline_multitask/morel/results/exp_test_22/models")
 
     if(not args.no_log):
+        print("Save at: ", run_log_dir)
         agent.save(os.path.join(run_log_dir, "models"))
         if comet_experiment is not None:
             upload_assets(comet_experiment, run_log_dir)
