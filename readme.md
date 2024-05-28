@@ -24,6 +24,9 @@ Baseline
         - // (walk m+ run m)
 
 
+
+
+
 | Method | walk(best) | run(best) |
 | -------- | -------- | -------- |
 | Expert Traj | 962.8321 | 318.36557 |
@@ -65,6 +68,37 @@ Baseline
 - (working) interface
     - 需要把最佳模型包装起来, 做成agent_example能调用的形式
 
+
+## Experience Results
+
+### Whether to add task bit
+
+| Method | Taskbit | walk | run | walk(all) | run(all) |
+| -------- | -------- | -------- | --------  | --------  | --------    |
+| random | \\ | ? | ? | ? | ? |
+| bc | Yes | ? | ? | ? | ?
+| bc | No | ? | ? | ? | ?
+| cql | Yes  | ? | ? | ? | ? |
+| cql | No | ? | ? | ? | ? |
+
+
+
+
+### Whether to add noise
+
+| Method | noise | walk | run | walk(all) | run(all) |
+| -------- | -------- | -------- | --------  | --------  | --------    |
+| cql | 0  | ? | ? | ? | ? |
+| cql | 0.1 | ? | ? | ? | ? |
+
+### Different dataset
+
+| Method | walk | run | walk(all) | run(all) | walk m | walk mr | run m | run mr|
+| -------- | -------- | -------- | --------  | --------  | --------    |-------- | --------  | --------  |
+|  bc | ? | ? | ? | ? | ? | ? | ? |
+| cql | ? | ? | ? | ? | ? | ? | ? |
+
+<!-- | random | ? | ? | ? | ? | ? | ? | ? | -->
 
 ## Usage
 
