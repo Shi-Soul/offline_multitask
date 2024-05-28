@@ -255,16 +255,92 @@ def get_gymnasium_env(task_name, seed=1):
     env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)
     return env
 
-def eval_agent_fast(agent, eval_episodes=100,seed=1):
+
+def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=50):
+    import multiprocessing as mp
+    
+    class EnvProcess(mp.Process):
+        def __init__(self, task_name, seed):
+            super(EnvProcess, self).__init__()
+            self.task_name = task_name
+            self.seed = seed
+            self.conn, self.child_conn = mp.Pipe()
+
+        def run(self):
+            # print("EnvProcess: run, seed=", self.seed)
+            eval_env = dmc.make(self.task_name, seed=self.seed)
+            while True:
+                cmd, args = self.child_conn.recv()
+                # print("EnvProcess: received", cmd, args)
+                if cmd =='reset':
+                    time_step = eval_env.reset()
+                    self.child_conn.send(time_step)
+                elif cmd =='step':
+                    action = args
+                    time_step = eval_env.step(action)
+                    self.child_conn.send(time_step)
+                elif cmd =='close':
+                    self.child_conn.close()
+                    break
+                else:
+                    raise ValueError(f"Unknown command {cmd}")
+    
     def evaluate_env_parallel(task_name, agent, seed):
+        assert eval_episodes % num_processes == 0, f"eval_episodes should be divisible by num_processes, but got {eval_episodes} and {num_processes}"
+        # num_processes = eval_episodes
+        total_reward = []
+            # expected shape: (eval_episodes,)
+            # consider the max process number, we'd like to divide the episodes into multiple runs
+            
+        HAS_ACT_VEC = hasattr(agent, 'act_vec')
+        if not HAS_ACT_VEC:
+            print("Warning: agent does not have act_vec method, will use act method instead")
+            
+        processes = [EnvProcess(task_name, seed+i) for i in range(num_processes)]
+        for p in processes:
+            # print("EnvProcess: send start")
+            p.start()
+            # print("EnvProcess: end  start")
+        conns = [p.conn for p in processes]
+        
+        for i in range(0, eval_episodes, num_processes):
+
+            [conn.send(('reset', None)) for conn in conns]
+            time_steps = [conn.recv() for conn in conns]
+            cumulative_reward = [0 for _ in range(num_processes)]
+
+            while not np.all(np.stack([time_step.last() for time_step in time_steps])):
+                obs_vec = np.stack([time_step.observation for time_step in time_steps])
+                if HAS_ACT_VEC:
+                    act_vec = agent.act_vec(obs_vec)
+                else:
+                    act_vec = [agent.act(obs) for obs in obs_vec]
+
+                [conn.send(('step', action)) for conn, action in zip(conns, act_vec)]
+                time_steps = [conn.recv() for conn in conns]
+                cumulative_reward = [cumulative_reward[i] + time_step.reward for i, time_step in enumerate(time_steps)]
+                
+            total_reward.extend(cumulative_reward)
+                
+        for conn in conns:
+            conn.send(('close', None))
+            conn.close()
+            
+        for p in processes:
+            p.join()
+            
+        assert len(total_reward) == eval_episodes
+        return total_reward
+    
+    def evaluate_env_naive(task_name, agent, seed):
         HAS_ACT_VEC = hasattr(agent, 'act_vec')
         if not HAS_ACT_VEC:
             print("Warning: agent does not have act_vec method, will use act method instead")
         eval_envs = [dmc.make(task_name, seed=seed+i) for i in range(eval_episodes)]
         time_steps = [eval_env.reset() for eval_env in eval_envs]
         cumulative_reward = [0 for _ in range(eval_episodes)]
-        while not jnp.all(jnp.stack([time_step.last() for time_step in time_steps])):
-            obs_vec = jnp.stack([time_step.observation for time_step in time_steps])
+        while not np.all(np.stack([time_step.last() for time_step in time_steps])):
+            obs_vec = np.stack([time_step.observation for time_step in time_steps])
             # shape: (eval_episodes, obs_dim)
             # action = agent.act(time_step.observation)
             if HAS_ACT_VEC:
@@ -276,7 +352,7 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1):
             cumulative_reward = [cumulative_reward[i] + time_step.reward for i, time_step in enumerate(time_steps)]
         return cumulative_reward
 
-    def eval_agent_parallel(agent, eval_episodes=100, seed=1):
+    def eval_agent_parallel():
         scores = {}
         for i, task_name in enumerate(["walker_walk", "walker_run"]):
             if agent.__class__.__name__ != 'Agent':
@@ -288,14 +364,18 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1):
 
             # Use Ray to execute each evaluation episode in a separate process
             score_res = evaluate_env_parallel(task_name,agent,seed)
-            scores[task_name] = sum(score_res) / eval_episodes
-            print(f"Task: {task_name}, Total Score: {score_res}")
+            mean = sum(score_res) / eval_episodes
+            std = np.std(score_res)
+            scores[task_name] = (mean, std)
+            
+            print(f"Task:\t {task_name}, Total Score: {score_res}")
 
         for task_name in ["walker_walk", "walker_run"]:
-            print(f"Task: {task_name}, Score: {scores[task_name]}")
+            # print(f"Task: {task_name}, Score: {scores[task_name]}")
+            print(f"Task:\t {task_name}, {scores[task_name][0]} +- {scores[task_name][1]}")
         return scores
     
-    return eval_agent_parallel(agent, eval_episodes=eval_episodes, seed=seed)
+    return eval_agent_parallel()
 
 def eval_agent(agent, eval_episodes=100,seed=1):
 # Agent(24, 6)
