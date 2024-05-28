@@ -7,15 +7,35 @@ Baseline
 - Random Policy Performance: 
     - walk 56, run 29
 
+
+- Exp
+    - 每个setting 训3次, eval时取100个episodes, 需要保留最佳模型
+    - baseline: bc, random 
+    - 最佳方法: cql, td3+bc, dt, mb  
+    - 有task bit, 无task bit: 
+        - walk-> walk; run-> run; *walk+run->walk+run*
+    - add noise exp
+        - different noise magnitude
+        - 
+    - Dataset Exp
+        - Walk-> Walk; Run-> Run; Walk+Run -> Walk+Run
+        - Walk m-> walk, walk mr -> walk;
+        - run  m-> run , run  mr -> run;  
+        - // (walk m+ run m)
+
+
 | Method | walk(best) | run(best) |
 | -------- | -------- | -------- |
 | Expert Traj | 962.8321 | 318.36557 |
 | Random | 56 | 29 |
-| BC   | 173  | 67   |
-| CQL(ours)   | 102   | 49   |
+| BC   | 173  | 67 |
+| ~~CQL(ours)~~   | 102   | 49   |
 | CQL(tianshou)   | 205.78   | 76.17   |
+| Dicision Tranformer | 229 | 75 |
 | TD3+BC(tianshou)   | 160   | ?   |
-| GAIL(tianshou)   | 160   | ?   |
+| model base ppo | ? | ? |
+| morel | ? | ? |
+| ~~GAIL(tianshou)~~   | 160   | ?   |
 | ~~PPO(sb3,online)~~ | ? | ? |
 
 - (done) Implement  Naive Imitation Learning 
@@ -34,15 +54,16 @@ Baseline
         - td error is very large: in terminal state, target value is super small, but the Q value is very large
         - in offline training, the model have no idea about the terminal state and timestep limit
         - **possible solution**: reward normalization
-- (working) Implement Model base method
+- (done) Implement Model base method
     - Implemented MLP & VAE model.
     - (problem) how to use the model?
-- (working) Implement Decision Transformer
-- (future) comparison experiments
+- (done) Implement Decision Transformer
+- (working) comparison experiments
     - find best parameter for existing algorithms 
     - does more data help?
     - does adding noise help?
-
+- (working) interface
+    - 需要把最佳模型包装起来, 做成agent_example能调用的形式
 
 
 ## Usage
