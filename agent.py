@@ -1,6 +1,7 @@
+
+from util import *
 import dmc
 import numpy as np
-from util import *
 
 class Agent:
     # An example of the agent to be implemented.
@@ -12,10 +13,15 @@ class Agent:
         assert state.shape == (self.state_dim,)
         action = np.random.uniform(-5, 5, size=(self.action_dim))
         return action
+    def act_vec(self, states):
+        assert states.shape[1] == self.state_dim
+        actions = np.random.uniform(-5, 5, size=(states.shape[0], self.action_dim))
+        return actions
     def load(self, load_path):
         pass
 
 
 # make_dataset()
 
-eval_agent(Agent(24, 6), eval_episodes=10,seed=1)
+eval_agent_fast(Agent(24, 6), eval_episodes=100,seed=1)
+# eval_agent(Agent(24, 6), eval_episodes=100,seed=1)

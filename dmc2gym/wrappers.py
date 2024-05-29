@@ -3,7 +3,8 @@ from dm_control import suite
 from dm_env import specs
 import numpy as np
 
-USE_TASKBIT=True
+# USE_TASKBIT=True
+_use_taskbit = True
 RUN_BIT = 1
 WALK_BIT = 0
 
@@ -53,6 +54,14 @@ class DMCWrapper(core.Env):
         channels_first=True
     ):
         assert 'random' in task_kwargs, 'please specify a seed, for deterministic behaviour'
+        global _use_taskbit
+        if "ADD_TASKBIT" in environment_kwargs:
+            # If you are creating multiple envs, please ensure they are consistent
+            # in whether or not to use taskbit
+            _use_taskbit = environment_kwargs["ADD_TASKBIT"]
+            environment_kwargs.pop("ADD_TASKBIT")
+        # else:
+        #     _use_taskbit = _use_taskbit
         self._from_pixels = from_pixels
         self._height = height
         self._width = width
@@ -79,10 +88,12 @@ class DMCWrapper(core.Env):
         )
 
         # create observation space
-        if USE_TASKBIT:
+        if _use_taskbit:
             self.taskbit = (RUN_BIT if task_name=="run" else WALK_BIT)
             obs_spec  = self._env.observation_spec()
             obs_spec['taskbit'] = specs.Array(shape=(1,), dtype=np.float32)
+        else:
+            obs_spec = self._env.observation_spec()
             
         if from_pixels:
             shape = [3, height, width] if channels_first else [height, width, 3]
@@ -120,8 +131,10 @@ class DMCWrapper(core.Env):
         else:
             
             obs = time_step.observation
-            obs['taskbit']=self.taskbit
+            if _use_taskbit:
+                obs['taskbit']=self.taskbit
             obs = _flatten_obs(obs)
+            # import pdb;pdb.set_trace()
         return obs
 
     def _convert_action(self, action):
@@ -159,7 +172,9 @@ class DMCWrapper(core.Env):
         self._observation_space.seed(seed)
 
     def step(self, action):
-        assert self._norm_action_space.contains(action)
+        if not self._norm_action_space.contains(action):
+            action = np.clip(action, self._norm_action_space.low, self._norm_action_space.high)
+        # assert self._norm_action_space.contains(action)
         action = self._convert_action(action)
         assert self._true_action_space.contains(action)
         reward = 0

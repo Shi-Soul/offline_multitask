@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from jax import random
-import sys
 from clu import metrics
 from flax.training import train_state  # Useful dataclass to keep train state
 from flax.training import checkpoints
@@ -15,45 +14,31 @@ import time
 from util import *
 import os
 
-default_seed=1
+SEED=1
 PWD = os.path.dirname(os.path.abspath(__file__))
 device = jax.devices("gpu")[0]
 assert device.platform=="gpu"
-ind = time.strftime("%Y%m%d-%H%M%S")
-CKPT_DIR = os.path.join(PWD, 'ckpt','il',ind)
 
 class MLPAgent:
     # An example of the agent to be implemented.
     # Your agent must extend from this class (you may add any other functions if needed).
-    def __init__(self, modelstate, state_dim, action_dim,ADD_TASK_BIT=False):
+    def __init__(self, modelstate, state_dim, action_dim):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.modelstate = modelstate
-        self.ADD_TASK_BIT = ADD_TASK_BIT
         self.task_bit = 1
         
     def set_task_bit(self, task_bit):
-        print("DEBUG: set_task_bit", task_bit)
+        # print("DEBUG: set_task_bit", task_bit)
         self.task_bit = task_bit
         
     def act(self, state):
         assert state.shape == (self.state_dim,)
-        if self.ADD_TASK_BIT:
-            state = np.concatenate([state, np.ones((1))*self.task_bit], axis=0).reshape(1, -1)
-        else:
-            state = state.reshape(1, -1)
+        state = np.concatenate([state, np.ones((1))*self.task_bit], axis=0).reshape(1, -1)
         # action = np.random.uniform(-5, 5, size=(self.action_dim))
         state = jax.device_put(state, device)
         action = self.modelstate.apply_fn({'params': self.modelstate.params}, state)
-        return np.array(action[0])
-    
-    def act_vec(self, states):
-        assert states.shape[1] == self.state_dim
-        if self.ADD_TASK_BIT:
-            states = np.concatenate([states, np.ones((states.shape[0],1))*self.task_bit], axis=1)
-        states = jax.device_put(states, device)
-        actions = self.modelstate.apply_fn({'params': self.modelstate.params}, states)
-        return np.array(actions)
+        return np.array(action[0])[:self.action_dim]
     
     def load(self, load_path):
         pass
@@ -71,6 +56,8 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         x = nn.silu(nn.Dense(256)(x))
         x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(256)(x))+x
+        x = nn.LayerNorm()(x)
+        x = nn.silu(nn.Dense(256)(x))+x
         # x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(256)(x))+x
         # x = nn.LayerNorm()(x)
@@ -81,7 +68,7 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.silu(nn.Dense(64)(x))+x
         # x = nn.LayerNorm()(x)
         x = nn.Dense(self.out_dims)(x)       # shape inference
-        x = nn.tanh(x)
+        # x = nn.tanh(x)
         return x
 
 @struct.dataclass
@@ -92,9 +79,9 @@ class Metrics(metrics.Collection):
 class TrainState(train_state.TrainState):
     metrics: Metrics
 
-def create_train_state(module, rng, learning_rate, momentum,ADD_TASK_BIT):
+def create_train_state(module, rng, learning_rate, momentum):
     """Creates an initial `TrainState`."""
-    params = module.init(rng, jnp.ones([1, OBS_DIM+int(ADD_TASK_BIT)]))['params'] # initialize parameters by passing a template image
+    params = module.init(rng, jnp.ones([1, OBS_DIM+1]))['params'] # initialize parameters by passing a template image
     tx = optax.adam(learning_rate, momentum)
     # tx = optax.sgd(learning_rate, momentum)
     return TrainState.create(
@@ -103,8 +90,9 @@ def create_train_state(module, rng, learning_rate, momentum,ADD_TASK_BIT):
 
 @jax.jit
 def compute_metrics(*, state, batch):
-    logits = state.apply_fn({'params': state.params}, batch['obs'])
-    loss = optax.l2_loss(logits, batch['act']).mean()
+    pred = state.apply_fn({'params': state.params}, batch['obs'])
+    target = jnp.concatenate([batch['act'],batch['obs_prime'],batch['rew']], axis=1)
+    loss = optax.l2_loss(pred, target).mean()
     metric_updates = state.metrics.single_from_model_output(
         loss=loss)
     metrics = state.metrics.merge(metric_updates)
@@ -117,7 +105,8 @@ def train_step(state, batch):
     """Train for a single step."""
     def loss_fn(params):
         pred = state.apply_fn({'params': params}, batch['obs'])
-        loss = optax.l2_loss(pred, batch['act']).mean()
+        target = jnp.concatenate([batch['act'],batch['obs_prime'],batch['rew']], axis=1)
+        loss = optax.l2_loss(pred, target).mean()
         return loss
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(state.params)
@@ -125,34 +114,25 @@ def train_step(state, batch):
     return state
 
 
-def main(random_noise=-1,num_epochs=100,
-         ADD_TASK_BIT=True,
-         USE_DATASET_STR="__all__",
-         SAMPLE_EXAMPLE=False,
-         TRAIN_TEST_SPLIT=False,
-         TEST_AFTER_TRAINING=False,
-         SEED=default_seed,
-         ):
+
+def main(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True):
 
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
 
-    num_epochs = num_epochs
+    num_epochs = 100
     # num_epochs = 100
     learning_rate = 0.002
     momentum = 0.9
     batch_size = 1024
     test_size = 0.2
-    random_noise = random_noise
+    random_noise = 0.02
     
     
-    # data = make_dataset()
-    # # merge_data = merge_dataset(data['run_m'],data['walk_m'])
-    # # merge_data = merge_dataset(*data.values())
+    data = make_dataset(True,DEAL_LAST="remove")
+    # merge_data = merge_dataset(data['run_m'],data['walk_m'])
+    merge_data = merge_dataset(*data.values())
     # merge_data = merge_dataset(data['walk_mr'])
-    if isinstance(USE_DATASET_STR, str):
-        USE_DATASET_STR = [USE_DATASET_STR]
-    merge_data = make_merge_dataset(USE_DATASET_STR, ADD_TASKBIT=ADD_TASK_BIT)
     if TRAIN_TEST_SPLIT:
         # split data into train and test
         train_data, test_data = train_test_split(merge_data, test_size=test_size)
@@ -163,9 +143,10 @@ def main(random_noise=-1,num_epochs=100,
     
     
     learning_rate = optax.cosine_decay_schedule(init_value=learning_rate, decay_steps=num_epochs*len(train_ds), alpha=0.0)
-    model = MLP(ACT_DIM)
-    print(model.tabulate(init_rng, jnp.ones([1, OBS_DIM+int(ADD_TASK_BIT)]),compute_flops=True))
-    state = create_train_state(model, init_rng, learning_rate, momentum,ADD_TASK_BIT=ADD_TASK_BIT)
+    model = MLP(ACT_DIM+OBS_DIM+1+1)
+        # act, obs_prime, task_bit, rew
+    print(model.tabulate(init_rng, jnp.ones([1, OBS_DIM+1]),compute_flops=True))
+    state = create_train_state(model, init_rng, learning_rate, momentum)
     state = jax.device_put(state, device)
     del init_rng  # Must not be used anymore.
     
@@ -196,7 +177,7 @@ def main(random_noise=-1,num_epochs=100,
                 f"\tloss: {metrics_history['test_loss']}, ")
         
     # Save the model
-    checkpoints.save_checkpoint(ckpt_dir=CKPT_DIR,
+    checkpoints.save_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','ilmb'),
                             target=state,
                             step=0,
                             overwrite=True,
@@ -207,63 +188,41 @@ def main(random_noise=-1,num_epochs=100,
         batch = next(train_ds)
         # inference
         num_sample = 10 
-        act = state.apply_fn({'params': state.params}, batch['obs'][:num_sample])
+        pred = state.apply_fn({'params': state.params}, batch['obs'][:num_sample])
+        act = pred[:,:ACT_DIM]
         loss = optax.l2_loss(act, batch['act'][:num_sample]).mean()
         print("DEBUG: batch['obs']", batch['obs'][:num_sample])
         print("DEBUG: act", act)
         print("DEBUG: batch['act']", batch['act'][:num_sample])
         print("DEBUG: loss", loss)
         
-    if TEST_AFTER_TRAINING:
-        agent = MLPAgent(state, OBS_DIM, ACT_DIM, ADD_TASK_BIT)
-        res = eval_agent_fast(agent, eval_episodes=100,seed=SEED, method='mp')
-        params = ("Params: ", {
-            'random_noise': random_noise,
-            'ADD_TASK_BIT': ADD_TASK_BIT,
-            'USE_DATASET_STR': USE_DATASET_STR,
-            'SAMPLE_EXAMPLE': SAMPLE_EXAMPLE,
-            'TRAIN_TEST_SPLIT': TRAIN_TEST_SPLIT,
-            'TEST_AFTER_TRAINING': TEST_AFTER_TRAINING,
-            'epoch': num_epochs,
-            'batch_size': batch_size,
-        })
-        return (res, params)
 
-def test(ADD_TASK_BIT=True,
-         SEED=default_seed,
-         ):
+def test():
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
 
     learning_rate = 0.005
     momentum = 0.9
     
-    model = MLP(ACT_DIM)
+    model = MLP(ACT_DIM+OBS_DIM+1+1)
     state = create_train_state(model, init_rng, learning_rate, momentum)
-    state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','il'), target=state)
+    state = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(PWD, 'ckpt','ilmb'), target=state)
     state = jax.device_put(state, device)
     # inference
     # act = state.apply_fn({'params': state.params}, batch['obs'])
-    agent = MLPAgent(state, OBS_DIM, ACT_DIM,ADD_TASK_BIT)
-    eval_agent_fast(agent, eval_episodes=100,seed=SEED, method='naive')
+    agent = MLPAgent(state, OBS_DIM, ACT_DIM)
+    eval_agent(agent, eval_episodes=5,seed=SEED)
     
         
 if __name__=="__main__":
-    # try:
-    #     args = sys.argv[1:]
-    #     start_time = time.time()
-    #     ret= fire.Fire({
-    #         'train': main,
-    #         'test': test
-    #     })
-    #     end_time = time.time()
-    #     print(ret)
-    #     print("Args: ", args)
-    #     print("Program Running time: ", end_time-start_time)
-    # except Exception as e:
-    #     print(">>BUG: ",e)
-    #     import pdb;pdb.post_mortem()
-    smart_run({
+    try:
+        start_time = time.time()
+        fire.Fire({
             'train': main,
             'test': test
-        },log_dir=CKPT_DIR)
+        })
+        end_time = time.time()
+        print("Program Running time: ", end_time-start_time)
+    except Exception as e:
+        print(">>BUG: ",e)
+        import pdb;pdb.post_mortem()

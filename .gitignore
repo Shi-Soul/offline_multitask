@@ -8,3 +8,4 @@ log
 *.pyc
 wandb
 *debug*
+morel/results

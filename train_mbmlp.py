@@ -34,8 +34,9 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.LayerNorm()(x)
         x = nn.silu(nn.Dense(256)(x))
         x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(256)(x))+x
-        # x = nn.LayerNorm()(x)
+        z = nn.silu(nn.Dense(12)(x))
+        x = nn.silu(nn.Dense(256)(z))+x
+        x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(256)(x))+x
         # x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(256)(x))+x
@@ -64,12 +65,12 @@ def create_train_state(module, rng, learning_rate, momentum):
         metrics=Metrics.empty())
 
 @jax.jit
-def compute_metrics(*, state, batch):
+def compute_metrics(*, state, batch, weight=1.0):
     # logits = state.apply_fn({'params': state.params}, batch['obs'])
     # loss = optax.l2_loss(logits, batch['act']).mean()
     pred = state.apply_fn({'params': state.params}, batch['obs'], batch['act'])
     # loss = optax.l2_loss(pred, jnp.concatenate([batch['obs_prime'],batch['rew']],axis=-1))#.mean()
-    loss = optax.huber_loss(pred, jnp.concatenate([batch['obs_prime'],batch['rew']],axis=-1))#.mean()
+    loss = weight*optax.huber_loss(pred, jnp.concatenate([batch['obs_prime'],batch['rew']],axis=-1))#.mean()
     loss_mean = loss.mean()
     loss_max = loss.max()
     metric_updates = state.metrics.single_from_model_output(
@@ -80,14 +81,14 @@ def compute_metrics(*, state, batch):
     return state
 
 @jax.jit
-def train_step(state, batch):
+def train_step(state, batch, weight=1.0):
     """Train for a single step."""
     def loss_fn(params):
         pred = state.apply_fn({'params': params}, batch['obs'], batch['act'])
         # loss = optax.l2_loss(pred, jnp.concatenate([batch['obs_prime'],batch['rew']],axis=-1)).mean()
         
         loss = optax.huber_loss(pred, jnp.concatenate([batch['obs_prime'],batch['rew']],axis=-1)).mean()
-        return loss
+        return loss*weight
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
@@ -95,18 +96,20 @@ def train_step(state, batch):
 
 
 
-def train(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True,VERBOSE=1):
+def train(USE_NEG_BATCH = True,SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True,VERBOSE=1):
 
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
+    
+    
 
-    num_epochs = 500
+    num_epochs = 100
     # num_epochs = 100
     learning_rate = 0.002
-    momentum = 0.9
+    momentum = 0.95
     batch_size = 256
     test_size = 0.05
-    random_noise = -1
+    random_noise = 0.0003
     
     
     data = make_dataset(True,True,"remove")
@@ -135,8 +138,25 @@ def train(SAMPLE_EXAMPLE=False,TRAIN_TEST_SPLIT=True,VERBOSE=1):
     for epoch in range(num_epochs):
         for step,batch in enumerate(train_ds):
             # Run optimization steps over training batches and compute batch metrics
-            state = train_step(state, batch) # get updated train state (which contains the updated parameters)
-            state = compute_metrics(state=state, batch=batch) # aggregate batch metrics
+            # state = train_step(state, batch) # get updated train state (which contains the updated parameters)
+            # state = compute_metrics(state=state, batch=batch) # aggregate batch metrics
+            
+            if not USE_NEG_BATCH:
+            
+                state = train_step(state, batch) # get updated train state (which contains the updated parameters)
+                state = compute_metrics(state=state, batch=batch) # aggregate batch metrics
+            
+            else:
+                neg_batch = {
+                    "obs": np.concatenate([batch["obs"],   batch["obs"]*np.random.randn(*batch["obs"].shape)   ],axis=0),
+                    "act": np.concatenate([batch["act"],np.random.uniform(-1,1,batch["act"].shape)],axis=0),
+                    "obs_prime": np.concatenate([batch["obs_prime"], np.zeros_like(batch["obs"])],axis=0),
+                    "rew":   np.concatenate([batch["rew"], np.zeros_like(batch["rew"])-1 ],axis=0 )
+                }
+                state = train_step(state, neg_batch, weight = 1.0) 
+                state = compute_metrics(state=state, batch=neg_batch, weight = 1.0) 
+                # neg_batch = {key: -value for key,value in batch.items()}
+                # state = compute_metrics(state=state, batch=neg_batch)
 
         # for metric,value in state.metrics.compute().items(): # compute metrics
         #     metrics_history[f'train_{metric}'].append(value) # record metrics
