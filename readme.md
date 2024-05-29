@@ -42,7 +42,9 @@ Baseline
 | ~~PPO(sb3,online)~~ | ? | ? |
 
 tianshou_cql results
+
 | dataset | walk(best) | run(best) | step per epoch | add task bit |
+| -------- | -------- | -------- | -------- | -------- |
 | all | 205.78 | 76.17 | 5000 | true |
 | all | 199.10 | 83.52 | 1000 | true |
 | all | 211.43 | 87.13 | 1000 | false |
