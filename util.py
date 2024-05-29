@@ -4,6 +4,7 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     
 from typing import Any, List, Union, Callable
+from typing import Any, Callable, Dict, Optional, Union
 import dmc
 import glob
 import numpy as np
@@ -86,6 +87,92 @@ class Gym2gymnasium(gym.Env):
     raise NotImplementedError
     # self.env.render()
 
+class TSPolicyAgent:
+    def __init__(self, policy: tianshou.policy.BasePolicy, 
+                 state_dim, action_dim,
+                 ADD_TASK_BIT=False):
+        self.policy = policy
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.ADD_TASK_BIT = ADD_TASK_BIT
+        self.task_bit = 1
+    def set_task_bit(self, task_bit):
+        print("DEBUG: set_task_bit", task_bit)
+        self.task_bit = task_bit
+        
+    def act(self, state):
+        assert state.shape == (self.state_dim,)
+        state = np.expand_dims(state, axis=0)
+        return self.act_vec(state)[0]
+    def act_vec(self, states):
+        assert states.shape[1] == self.state_dim
+        if self.ADD_TASK_BIT:
+            states = np.concatenate([states, np.ones((states.shape[0],1))*self.task_bit], axis=1)
+        actions = self.policy.map_action(
+            self.policy(tianshou.data.Batch(obs=states, info={}) ).act)
+        return actions.detach().cpu().numpy()
+    def load(self, load_path):
+        # TODO:
+        raise NotImplementedError
+        pass
+    
+
+class TSOfflineTrainer(tianshou.trainer.OfflineTrainer):
+    def __init__(self,*args, **kwargs):
+        if 'eval_fn' in kwargs:
+            assert 'eval_fn' in kwargs, "eval_fn should be in kwargs"
+            assert 'eval_every_epoch' in kwargs, "eval_every_epoch should be in kwargs"
+            self.eval_in_train = True
+            self.eval_every_epoch = kwargs.pop('eval_every_epoch')
+            self.eval_fn = kwargs.pop('eval_fn')
+        else:
+            self.eval_in_train = False
+        if 'random_noise' in kwargs:
+            self.random_noise = kwargs.pop('random_noise')
+            self.add_noise = (self.random_noise > 0)
+            print("Debug: add noise")
+        else:
+            self.add_noise = False
+            
+        super().__init__(*args, **kwargs)
+        if self.add_noise:
+            self._policy_origin_process_fn = self.policy.process_fn
+            
+            def _process_fn_with_noise(policy, batch: tianshou.data.Batch, buffer: tianshou.data.ReplayBuffer, indices: np.ndarray) -> tianshou.data.Batch:
+                print("Debug: add noise")
+                batch = self._policy_origin_process_fn(policy,batch, buffer, indices)
+                for key in batch.keys():
+                    if key in ['obs', 'obs_next', 'act', 'rew']:
+                        batch[key] = batch[key] + np.random.normal(0, self.random_noise, batch[key].shape)
+                return batch
+            
+            self.policy.process_fn = _process_fn_with_noise
+            
+    
+    def __next__(self):
+        super().__next__()
+        if self.eval_in_train and \
+            (self.epoch % self.eval_every_epoch == 0) :
+            self.eval_fn(self)
+
+def get_ts_eval_fn(seed=1, ADD_TASKBIT=True,logger: Optional[tianshou.utils.BaseLogger] = None):
+    agent = TSPolicyAgent(None, OBS_DIM, ACT_DIM,ADD_TASK_BIT=ADD_TASKBIT)
+    def eval_fn(self: TSOfflineTrainer):
+        # Run policy in walk and run envs   
+        # Report mean and std of rewards
+        agent.policy = self.policy
+        self.policy.eval()
+        res = eval_agent_fast(agent, eval_episodes=10,seed=seed)
+        if logger is not None:
+            logger.write( "eval",self.epoch, {
+                "walker_walk_mean": res["walker_walk"][0],
+                "walker_run_mean": res["walker_run"][0],
+                "walker_walk_std": res["walker_walk"][1],
+                "walker_run_std": res["walker_run"][1],
+            })
+        ...
+    return eval_fn
+
 @contextlib.contextmanager
 def log_and_print(log_dir='.'):
     if log_dir is None:
@@ -136,6 +223,17 @@ def smart_run(cmd_dict: Union[dict, Callable],**kwargs):
     except Exception as e:
         print(">>BUG: ",e)
         import pdb;pdb.post_mortem()
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise ValueError('Boolean value expected.')
+
 
 def load_data(data_path):
     """
@@ -262,9 +360,10 @@ def make_merge_dataset(USE_DATASET: List[str]=["__all__"], MAKE_SARSA=False, ADD
     merge_data = merge_dataset(*[data[key] for key in USE_DATASET])
     return merge_data
 
-def load_buffer_dataset(ADD_TASKBIT=True):
-    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=ADD_TASKBIT)
-    merge_data = merge_dataset(*data.values())
+def load_buffer_dataset(*args, **kwargs):
+    # data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=ADD_TASKBIT)
+    # merge_data = merge_dataset(*data.values())
+    merge_data = make_merge_dataset(*args, **kwargs)
     # merge_data = merge_dataset(data['run_mr'], data['run_m'])
     # merge_data = merge_dataset(data['walk_mr'], data['walk_m'])
     merge_data['rew'] = merge_data['rew'].flatten()

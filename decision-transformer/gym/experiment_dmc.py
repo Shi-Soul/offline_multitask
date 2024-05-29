@@ -47,7 +47,7 @@ def experiment(
         # env = dmc2gym.make(domain_name='walker', task_name='walk', seed=1)
         env = get_gym_env('walk')
         max_ep_len = 1000
-        env_targets = [3600, 1800]  # evaluation conditioning targets
+        env_targets = [1000, 500, 300, 200]  # evaluation conditioning targets
         scale = 1000.  # normalization for rewards/returns
         bit = 0
     elif env_name == 'dmc_run':
@@ -55,7 +55,7 @@ def experiment(
         # env = dmc2gym.make(domain_name='walker', task_name='run', seed=1)
         env = get_gym_env('run')
         max_ep_len = 1000
-        env_targets = [5000, 2500]
+        env_targets = [1000, 500, 300, 200]
         scale = 1000.
         bit = 1
     else:
@@ -71,13 +71,24 @@ def experiment(
     print('########### Loading Data ...... ###########')
     trajectories = []
     if env_name == 'dmc_walk':
-        dataset_file_path = '../../collected_data/walker_walk-td3-medium/data'
+        if dataset == 'all':
+            dataset_file_paths = ['../../collected_data/walker_walk-td3-medium/data', '../../collected_data/walker_walk-td3-medium-replay/data']
+        elif dataset == 'medium':
+            dataset_file_paths = ['../../collected_data/walker_walk-td3-medium/data']
+        elif dataset == 'medium-replay':
+            dataset_file_paths = ['../../collected_data/walker_walk-td3-medium-replay/data']
     else:
-        dataset_file_path = '../../collected_data/walker_run-td3-medium/data'
-    for root, dirs, files in os.walk(dataset_file_path):
-        for file in files:
-            full_path = os.path.join(root, file)
-            trajectories.append(full_path)
+        if dataset == 'all':
+            dataset_file_paths = ['../../collected_data/walker_run-td3-medium/data', '../../collected_data/walker_run-td3-medium-replay/data']
+        elif dataset == 'medium':
+            dataset_file_paths = ['../../collected_data/walker_run-td3-medium/data']
+        elif dataset == 'medium-replay':
+            dataset_file_paths = ['../../collected_data/walker_run-td3-medium-replay/data']
+    for dataset_file_path in dataset_file_paths:
+        for root, dirs, files in os.walk(dataset_file_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                trajectories.append(full_path)
     # with open(dataset_path, 'rb') as f:
     #     trajectories = pickle.load(f)
 
@@ -91,7 +102,10 @@ def experiment(
             path['reward'][-1] = path['reward'].sum()
             path['reward'][:-1] = 0.
         # print(path['observation'].shape)
-        states.append(np.concatenate([path['observation'], np.ones((path['observation'].shape[0], 1)) * bit], axis=1))
+        if variant['task_bit']:
+            states.append(np.concatenate([path['observation'], np.ones((path['observation'].shape[0], 1)) * bit], axis=1))
+        else:
+            states.append(path['observations'])
         # print(states[-1].shape)
         traj_lens.append(len(path['observation']))
         returns.append(path['reward'].sum())
@@ -149,7 +163,8 @@ def experiment(
             # get sequences from dataset
             traj['dones'] = np.zeros(len(traj['observation']))
             traj['dones'][-1] = 1
-            traj['observation'] = np.concatenate([traj['observation'], np.ones((traj['observation'].shape[0], 1)) * bit], axis=1)
+            if variant['task_bit']:
+                traj['observation'] = np.concatenate([traj['observation'], np.ones((traj['observation'].shape[0], 1)) * bit], axis=1)
             s.append(traj['observation'][si:si + max_len].reshape(1, -1, state_dim))
             a.append(traj['action'][si:si + max_len].reshape(1, -1, act_dim))
             r.append(traj['reward'][si:si + max_len].reshape(1, -1, 1))
@@ -307,26 +322,28 @@ def experiment(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='dmc_walk')
-    parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
+    parser.add_argument('--env', type=str, default='dmc_run')
+    parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, all
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
-    parser.add_argument('--embed_dim', type=int, default=128)
+    parser.add_argument('--embed_dim', type=int, default=256)
     parser.add_argument('--n_layer', type=int, default=3)
     parser.add_argument('--n_head', type=int, default=1)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
-    parser.add_argument('--warmup_steps', type=int, default=10000)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-3)
+    parser.add_argument('--warmup_steps', type=int, default=2)
     parser.add_argument('--num_eval_episodes', type=int, default=10)
     parser.add_argument('--max_iters', type=int, default=10)
     parser.add_argument('--num_steps_per_iter', type=int, default=1000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
+    parser.add_argument('--task_bit', type=bool, default=True)
+    parser.add_argument('--noise', type=int, default=0)
     
     args = parser.parse_args()
 

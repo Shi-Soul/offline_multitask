@@ -41,6 +41,7 @@ def normalize_all_obs_in_replay_buffer(
                                   obs_rms.mean) / np.sqrt(obs_rms.var + _eps)
     replay_buffer._meta["obs_next"] = (replay_buffer.obs_next -
                                        obs_rms.mean) / np.sqrt(obs_rms.var + _eps)
+    print("DEBUG: ",obs_rms.mean, obs_rms.var, obs_rms.count)
     return replay_buffer, obs_rms
 
 def get_args():
@@ -54,22 +55,22 @@ def get_args():
     parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
-    parser.add_argument("--epoch", type=int, default=200)
-    parser.add_argument("--step-per-epoch", type=int, default=5000)
+    parser.add_argument("--epoch", type=int, default=500)
+    parser.add_argument("--step-per-epoch", type=int, default=2000)
     parser.add_argument("--n-step", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=256)
 
-    parser.add_argument("--alpha", type=float, default=2.5)
-    parser.add_argument("--exploration-noise", type=float, default=0.1)
-    parser.add_argument("--policy-noise", type=float, default=0.2)
+    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument("--exploration-noise", type=float, default=0.03)
+    parser.add_argument("--policy-noise", type=float, default=0.1)
     parser.add_argument("--noise-clip", type=float, default=0.5)
     parser.add_argument("--update-actor-freq", type=int, default=2)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--norm-obs", type=int, default=1)
+    parser.add_argument("--norm-obs", type=int, default=0)
 
-    parser.add_argument("--eval-freq", type=int, default=1)
-    parser.add_argument("--test-num", type=int, default=10)
+    parser.add_argument("--eval-freq", type=int, default=10)
+    parser.add_argument("--test-num", type=int, default=5)
     parser.add_argument("--logdir", type=str, default="tslog")
     parser.add_argument("--render", type=float, default=None)
     parser.add_argument(
@@ -81,7 +82,7 @@ def get_args():
         "--logger",
         type=str,
         default="wandb",
-        choices=["tensorboard", "wandb"],
+        choices=["tensorboard", "wandb","none"],
     )
     parser.add_argument("--wandb-project", type=str, default="rlp_td3bc")
     parser.add_argument(
@@ -90,12 +91,31 @@ def get_args():
         action="store_true",
         help="watch the play of pre-trained policy only",
     )
+    
+    parser.add_argument(
+        "--ADD_TASKBIT",
+        type = str2bool,
+        default=True,
+        help="add taskbit to observation",
+    )
+    parser.add_argument(
+        "--random_noise",
+        type=float,
+        default=-1,
+        help="add random noise to dataset",
+    )
+    parser.add_argument(
+        "--USE_DATASET_STR",
+        type=str,
+        default="__all__",
+        help="use dataset string",
+    )
     return parser.parse_args()
 
 
 def test_td3_bc():
-    ADD_TASKBIT = True
     args = get_args()
+    ADD_TASKBIT = args.ADD_TASKBIT
     # log
     now = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
     args.algo_name = "td3_bc"
@@ -120,14 +140,15 @@ def test_td3_bc():
     args.action_dim = args.action_shape[0]
     print("Max_action", args.max_action)
 
-    test_envs = DummyVectorEnv(
+    test_envs = SubprocVectorEnv(
         [lambda: get_gym_env(args.task,ADD_TASKBIT=ADD_TASKBIT) for _ in range(args.test_num)]
     )
-    # test_envs = SubprocVectorEnv(
-    #     [lambda: get_gym_env(args.task,ADD_TASKBIT=ADD_TASKBIT) for _ in range(args.test_num)]
-    # )
     if args.norm_obs:
         test_envs = VectorEnvNormObs(test_envs, update_obs_rms=False)
+        
+    replay_buffer = load_buffer_dataset(USE_DATASET=args.USE_DATASET_STR.split(','),
+                                        ADD_TASKBIT=ADD_TASKBIT,
+                                        MAKE_SARSA=True)
 
     # seed
     np.random.seed(args.seed)
@@ -192,25 +213,31 @@ def test_td3_bc():
         policy.load_state_dict(torch.load(args.resume_path, map_location=args.device))
         print("Loaded agent from: ", args.resume_path)
 
+
     # collector
     test_collector = Collector(policy, test_envs)
 
 
     # logger
-    if args.logger == "wandb":
-        logger = WandbLogger(
-            save_interval=1,
-            name=log_name.replace(os.path.sep, "__"),
-            run_id=args.resume_id,
-            config=args,
-            project=args.wandb_project,
-        )
-    writer = SummaryWriter(log_path)
-    writer.add_text("args", str(args))
-    if args.logger == "tensorboard":
-        logger = TensorboardLogger(writer)
-    else:  # wandb
-        logger.load(writer)
+    if not args.logger == "none":
+        if args.logger == "wandb":
+            logger = WandbLogger(
+                save_interval=1,
+                name=log_name.replace(os.path.sep, "__"),
+                run_id=args.resume_id,
+                config=args,
+                project=args.wandb_project,
+            )
+        writer = SummaryWriter(log_path)
+        writer.add_text("args", str(args))
+        if args.logger == "tensorboard":
+            logger = TensorboardLogger(writer)
+        else:  # wandb
+            logger.load(writer)
+    else:
+        logger = None
+
+        
 
     def save_best_fn(policy):
         torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
@@ -228,12 +255,11 @@ def test_td3_bc():
 
     if not args.watch:
         # replay_buffer = load_buffer_d4rl(args.expert_data_task)
-        replay_buffer = load_buffer_dataset(ADD_TASKBIT)
         if args.norm_obs:
             replay_buffer, obs_rms = normalize_all_obs_in_replay_buffer(replay_buffer)
             test_envs.set_obs_rms(obs_rms)
         # trainer
-        result = offline_trainer(
+        result = TSOfflineTrainer(
             policy,
             replay_buffer,
             test_collector,
@@ -242,8 +268,10 @@ def test_td3_bc():
             args.test_num,
             args.batch_size,
             save_best_fn=save_best_fn,
-            logger=logger,
-        )
+            eval_fn=get_ts_eval_fn(seed=args.seed, ADD_TASKBIT=ADD_TASKBIT,logger=logger),
+            eval_every_epoch=args.eval_freq,
+            logger=logger or tianshou.utils.LazyLogger(),
+        ).run()
         pprint.pprint(result)
     else:
         watch()
@@ -254,7 +282,15 @@ def test_td3_bc():
     test_collector.reset()
     result = test_collector.collect(n_episode=args.test_num, render=args.render)
     print(f"Final reward: {result['rews'].mean()}, length: {result['lens'].mean()}")
-
+    
+    # return (eval_agent_fast(),args)
+    result = eval_agent_fast(TSPolicyAgent(policy,
+                                            args.state_dim-ADD_TASKBIT,
+                                            args.action_dim,
+                                            ADD_TASK_BIT=ADD_TASKBIT
+                                            ),
+                             eval_episodes=100,seed=args.seed, method='mp')
+    return (result,args)
 
 if __name__ == "__main__":
     
