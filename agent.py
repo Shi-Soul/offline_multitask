@@ -1,6 +1,7 @@
+
+from util import *
 import dmc
 import numpy as np
-from util import *
 
 class Agent:
     # An example of the agent to be implemented.

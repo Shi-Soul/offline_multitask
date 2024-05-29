@@ -13,7 +13,7 @@ Baseline
     - baseline: bc, random 
     - 最佳方法: cql, td3+bc, dt, mb  
     - 有task bit, 无task bit: 
-        - walk-> walk; run-> run; *walk+run->walk+run*
+        - walk-> walk; run-> run; **walk+run->walk+run**
     - add noise exp
         - different noise magnitude
         - 
@@ -139,6 +139,8 @@ rm -r project
 python agent.py
 python train_il.py train
 python train_il.py test
+python train_il.py train --random_noise=-1 --ADD_TASK_BIT=True --USE_DATASET_STR="walk_m" --TEST_AFTER_TRAINING=True
+
 python train_cqlsac.py train
 python train_cqlsac.py test
 

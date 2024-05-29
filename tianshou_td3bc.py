@@ -4,7 +4,7 @@ import argparse
 import datetime
 import os
 import pprint
-
+from typing import Tuple
 import gymnasium as gym
 import numpy as np
 import torch
@@ -12,7 +12,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 # from examples.offline.utils import load_buffer_d4rl, normalize_all_obs_in_replay_buffer
 from tianshou.data import Collector
-from tianshou.env import SubprocVectorEnv, VectorEnvNormObs
+from tianshou.env import SubprocVectorEnv, VectorEnvNormObs, DummyVectorEnv
+from tianshou.data import ReplayBuffer
+from tianshou.utils import RunningMeanStd
 from tianshou.exploration import GaussianNoise
 from tianshou.policy import TD3BCPolicy
 from tianshou.trainer import offline_trainer
@@ -21,6 +23,11 @@ from tianshou.utils.net.common import Net
 from tianshou.utils.net.continuous import Actor, Critic
 from util import *
 
+default_seed=1
+PWD = os.path.dirname(os.path.abspath(__file__))
+ind = time.strftime("%Y%m%d-%H%M%S")
+CKPT_NAME = os.path.join('ckpt','ts_td3+bc',ind)
+CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 def normalize_all_obs_in_replay_buffer(
     replay_buffer: ReplayBuffer
@@ -73,10 +80,10 @@ def get_args():
     parser.add_argument(
         "--logger",
         type=str,
-        default="tensorboard",
+        default="wandb",
         choices=["tensorboard", "wandb"],
     )
-    parser.add_argument("--wandb-project", type=str, default="offline_d4rl.benchmark")
+    parser.add_argument("--wandb-project", type=str, default="rlp_td3bc")
     parser.add_argument(
         "--watch",
         default=False,
@@ -87,9 +94,20 @@ def get_args():
 
 
 def test_td3_bc():
+    ADD_TASKBIT = True
     args = get_args()
+    # log
+    now = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+    args.algo_name = "td3_bc"
+    # log_name = os.path.join(args.algo_name, args.task, str(args.seed)+"_"+ now)
+    # log_path = os.path.join(args.logdir, log_name)
+    # log_name = os.path.join(args.algo_name, args.task, str(args.seed))
+    # log_path = os.path.join(args.logdir, log_name)
+    log_name = CKPT_NAME
+    log_path = CKPT_DIR
+    
     # env = gym.make(args.task)
-    env = get_gym_env(args.task)
+    env = get_gym_env(args.task,seed=default_seed,ADD_TASKBIT=ADD_TASKBIT)
     args.state_shape = env.observation_space.shape or env.observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
     args.max_action = env.action_space.high[0]  # float
@@ -102,9 +120,12 @@ def test_td3_bc():
     args.action_dim = args.action_shape[0]
     print("Max_action", args.max_action)
 
-    test_envs = SubprocVectorEnv(
-        [lambda: get_gym_env(args.task) for _ in range(args.test_num)]
+    test_envs = DummyVectorEnv(
+        [lambda: get_gym_env(args.task,ADD_TASKBIT=ADD_TASKBIT) for _ in range(args.test_num)]
     )
+    # test_envs = SubprocVectorEnv(
+    #     [lambda: get_gym_env(args.task,ADD_TASKBIT=ADD_TASKBIT) for _ in range(args.test_num)]
+    # )
     if args.norm_obs:
         test_envs = VectorEnvNormObs(test_envs, update_obs_rms=False)
 
@@ -174,11 +195,6 @@ def test_td3_bc():
     # collector
     test_collector = Collector(policy, test_envs)
 
-    # log
-    now = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
-    args.algo_name = "td3_bc"
-    log_name = os.path.join(args.task, args.algo_name, str(args.seed), now)
-    log_path = os.path.join(args.logdir, log_name)
 
     # logger
     if args.logger == "wandb":
@@ -212,7 +228,7 @@ def test_td3_bc():
 
     if not args.watch:
         # replay_buffer = load_buffer_d4rl(args.expert_data_task)
-        replay_buffer = load_buffer_dataset()
+        replay_buffer = load_buffer_dataset(ADD_TASKBIT)
         if args.norm_obs:
             replay_buffer, obs_rms = normalize_all_obs_in_replay_buffer(replay_buffer)
             test_envs.set_obs_rms(obs_rms)
@@ -241,8 +257,6 @@ def test_td3_bc():
 
 
 if __name__ == "__main__":
-    try:
-        test_td3_bc()
-    except Exception as e:
-        print(f">> BUG:  {e}")
-        import pdb;pdb.post_mortem()
+    
+        # test_td3_bc()
+    smart_run(test_td3_bc,log_dir=CKPT_DIR,fire=False)

@@ -1,22 +1,26 @@
-from typing import Any
+
+import multiprocessing as mp
+if __name__ == '__main__':
+    mp.set_start_method('spawn')
+    
+from typing import Any, List, Union, Callable
 import dmc
 import glob
 import numpy as np
 import gymnasium as gym
-# import os
-# os.set_start_method('spawn')
-# import multiprocessing
-# multiprocessing.set_start_method('spawn')  
+import contextlib
+import fire
+import os
 from copy import deepcopy
 import jax
-# import tianshou
+import tianshou
 from jax import numpy as jnp
 import time
+import sys
 OBS_DIM = 24
 ACT_DIM = 6
 RUN_BIT = 1
 WALK_BIT = 0
-
 class Timer():
     def __enter__(self):
         self.start = time.time()
@@ -24,7 +28,6 @@ class Timer():
     def __exit__(self, *args):
         self.end = time.time()
         self.interval = self.end - self.start
-    
     
 class DataLoader:
     def __init__(self, data:dict, batch_size=32, random_noise=-1, device=None):
@@ -83,6 +86,56 @@ class Gym2gymnasium(gym.Env):
     raise NotImplementedError
     # self.env.render()
 
+@contextlib.contextmanager
+def log_and_print(log_dir='.'):
+    if log_dir is None:
+        yield
+        return
+    
+    old_print = sys.stdout.write
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    log_handle = open(os.path.join(log_dir,'log.txt'), 'a')
+    def _log_print(*args, **kwargs):
+        log_handle.write(*args, **kwargs)
+        old_print(*args, **kwargs)
+        # sys.stdout.flush()
+        log_handle.flush()
+    sys.stdout.write = _log_print
+    try:
+        yield
+    finally:
+        sys.stdout.write = old_print
+        log_handle.close()
+
+def smart_run(cmd_dict: Union[dict, Callable],**kwargs):
+    # supported kwargs:
+        # log_dir: str
+        # fire: bool
+    try:
+        log_dir = kwargs.get('log_dir', None)
+        use_fire = kwargs.get('fire', True)
+        assert use_fire or not isinstance(cmd_dict, dict), "cmd_dict should be a callable if fire is False"
+        with log_and_print(log_dir):
+            args = sys.argv[1:]
+            print("-----"*20)
+            print("Args: ", args)
+            print("Log at: ", log_dir)
+            print("-----"*20)
+            start_time = time.time()
+            if use_fire:
+                ret= fire.Fire(cmd_dict)
+            else:
+                ret = cmd_dict()
+            end_time = time.time()
+            print("-----"*20)
+            print("Result: ",ret)
+            print("Args: ", args)
+            print("Log at: ", log_dir)
+            print("Program Running time: ", end_time-start_time)
+    except Exception as e:
+        print(">>BUG: ",e)
+        import pdb;pdb.post_mortem()
 
 def load_data(data_path):
     """
@@ -202,9 +255,15 @@ def merge_dataset(*args):
         ret[key] = np.concatenate([dataset[key] for dataset in args], axis=0)
     return ret
 
+def make_merge_dataset(USE_DATASET: List[str]=["__all__"], MAKE_SARSA=False, ADD_TASKBIT=True, DEAL_LAST="repeat"):
+    data = make_dataset(MAKE_SARSA=MAKE_SARSA, ADD_TASKBIT=ADD_TASKBIT, DEAL_LAST=DEAL_LAST)
+    if "__all__" in USE_DATASET:
+        USE_DATASET = list(data.keys())
+    merge_data = merge_dataset(*[data[key] for key in USE_DATASET])
+    return merge_data
 
-def load_buffer_dataset():
-    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=True)
+def load_buffer_dataset(ADD_TASKBIT=True):
+    data = make_dataset(MAKE_SARSA=True,ADD_TASKBIT=ADD_TASKBIT)
     merge_data = merge_dataset(*data.values())
     # merge_data = merge_dataset(data['run_mr'], data['run_m'])
     # merge_data = merge_dataset(data['walk_mr'], data['walk_m'])
@@ -230,6 +289,7 @@ def reward_normalize(dataset):
     return dataset, mean, std
 
 
+
 def train_test_split(data, test_size=0.2):
     n = data['obs'].shape[0]
     idx = np.random.permutation(n)
@@ -242,59 +302,64 @@ def train_test_split(data, test_size=0.2):
         test_data[key] = data[key][idx[n_train:]]
     return train_data, test_data
 
-def get_gym_env(task_name, seed=1):
+def get_gym_env(task_name, seed=1, ADD_TASKBIT=True):
     import dmc2gym
     assert task_name in ["walk","run"], f"task_name should be 'walk' or 'run', but got {task_name}"
 
-    env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=seed)
+    env = dmc2gym.make(domain_name='walker', task_name=task_name, seed=seed,
+                       environment_kwargs={
+                           "ADD_TASKBIT": ADD_TASKBIT,
+                       })
     return env
 
-def get_gymnasium_env(task_name, seed=1):
-    env = get_gym_env(task_name, seed=seed)
+def get_gymnasium_env(task_name, seed=1, ADD_TASKBIT=True):
+    env = get_gym_env(task_name, seed=seed, ADD_TASKBIT=ADD_TASKBIT)
     env = Gym2gymnasium(env)
     env = gym.wrappers.TimeLimit(env, max_episode_steps=1000)
     return env
 
 
-def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=50):
-    import multiprocessing as mp
-    
-    class EnvProcess(mp.Process):
-        def __init__(self, task_name, seed):
-            super(EnvProcess, self).__init__()
-            self.task_name = task_name
-            self.seed = seed
-            self.conn, self.child_conn = mp.Pipe()
+class EnvProcess(mp.Process):
+    def __init__(self, task_name, seed):
+        super(EnvProcess, self).__init__()
+        self.task_name = task_name
+        self.seed = seed
+        self.conn, self.child_conn = mp.Pipe()
 
-        def run(self):
-            # print("EnvProcess: run, seed=", self.seed)
-            eval_env = dmc.make(self.task_name, seed=self.seed)
-            while True:
-                cmd, args = self.child_conn.recv()
-                # print("EnvProcess: received", cmd, args)
-                if cmd =='reset':
-                    time_step = eval_env.reset()
-                    self.child_conn.send(time_step)
-                elif cmd =='step':
-                    action = args
-                    time_step = eval_env.step(action)
-                    self.child_conn.send(time_step)
-                elif cmd =='close':
-                    self.child_conn.close()
-                    break
-                else:
-                    raise ValueError(f"Unknown command {cmd}")
+    def run(self):
+        # print("EnvProcess: run, seed=", self.seed)
+        eval_env = dmc.make(self.task_name, seed=self.seed)
+        while True:
+            cmd, args = self.child_conn.recv()
+            # print("EnvProcess: received", cmd, args)
+            if cmd =='reset':
+                time_step = eval_env.reset()
+                self.child_conn.send(time_step)
+            elif cmd =='step':
+                action = args
+                time_step = eval_env.step(action)
+                self.child_conn.send(time_step)
+            elif cmd =='close':
+                self.child_conn.close()
+                break
+            else:
+                raise ValueError(f"Unknown command {cmd}")
     
+
+def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=10, method='mp'):
+    assert method in ['mp', 'naive'], f"method should be 'mp' or 'naive', but got {method}"
+    print('--'*10+"Start evaluation"+'--'*10)
+    num_processes = min(num_processes, eval_episodes)
+    HAS_ACT_VEC = hasattr(agent, 'act_vec')
+    if not HAS_ACT_VEC:
+        print("Warning: agent does not have act_vec method, will use act method instead")
+
     def evaluate_env_parallel(task_name, agent, seed):
         assert eval_episodes % num_processes == 0, f"eval_episodes should be divisible by num_processes, but got {eval_episodes} and {num_processes}"
         # num_processes = eval_episodes
         total_reward = []
             # expected shape: (eval_episodes,)
             # consider the max process number, we'd like to divide the episodes into multiple runs
-            
-        HAS_ACT_VEC = hasattr(agent, 'act_vec')
-        if not HAS_ACT_VEC:
-            print("Warning: agent does not have act_vec method, will use act method instead")
             
         processes = [EnvProcess(task_name, seed+i) for i in range(num_processes)]
         for p in processes:
@@ -322,20 +387,13 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=50):
                 
             total_reward.extend(cumulative_reward)
                 
-        for conn in conns:
-            conn.send(('close', None))
-            conn.close()
-            
-        for p in processes:
-            p.join()
+        [(conn.send(('close', None)), conn.close()) for conn in conns]
+        [p.join() for p in processes]
             
         assert len(total_reward) == eval_episodes
         return total_reward
     
     def evaluate_env_naive(task_name, agent, seed):
-        HAS_ACT_VEC = hasattr(agent, 'act_vec')
-        if not HAS_ACT_VEC:
-            print("Warning: agent does not have act_vec method, will use act method instead")
         eval_envs = [dmc.make(task_name, seed=seed+i) for i in range(eval_episodes)]
         time_steps = [eval_env.reset() for eval_env in eval_envs]
         cumulative_reward = [0 for _ in range(eval_episodes)]
@@ -363,7 +421,10 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=50):
                 agent.set_task_bit(task_bit)
 
             # Use Ray to execute each evaluation episode in a separate process
-            score_res = evaluate_env_parallel(task_name,agent,seed)
+            if method == 'mp':
+                score_res = evaluate_env_parallel(task_name,agent,seed)
+            else:
+                score_res = evaluate_env_naive(task_name,agent,seed)
             mean = sum(score_res) / eval_episodes
             std = np.std(score_res)
             scores[task_name] = (mean, std)
@@ -375,7 +436,9 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=50):
             print(f"Task:\t {task_name}, {scores[task_name][0]} +- {scores[task_name][1]}")
         return scores
     
-    return eval_agent_parallel()
+    res = eval_agent_parallel()
+    print('--'*10+"End evaluation"+'--'*10)
+    return res
 
 def eval_agent(agent, eval_episodes=100,seed=1):
 # Agent(24, 6)
