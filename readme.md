@@ -31,7 +31,7 @@ Baseline
 | -------- | -------- | -------- |
 | Expert Traj | 962.8321 | 318.36557 |
 | Random | 51.85748167535231 +- 12.673925499073189 | 27.921023864970184 +- 3.4484724900639914 |
-| BC   | 173  | 67 |
+| BC   | (181.86798185904092, 44.01772755239101)  | (66.94229235058019, 14.862189258857475) |
 | ~~CQL(ours)~~   | 102   | 49   |
 | CQL(tianshou)   | 205.78   | 76.17   |
 | Dicision Tranformer | 229 | 75 |
@@ -116,7 +116,7 @@ conda activate rlp
 pip install dm_control # 1.0.18
 pip install gym  # 0.26.2
 
-pip install jax # 0.4.26
+pip install "jax==0.4.26"
 # pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
     # For CUDA version Jax
 pip install flax #0.8.3
