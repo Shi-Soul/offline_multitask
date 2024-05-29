@@ -130,7 +130,7 @@ class TSOfflineTrainer(tianshou.trainer.OfflineTrainer):
         if 'random_noise' in kwargs:
             self.random_noise = kwargs.pop('random_noise')
             self.add_noise = (self.random_noise > 0)
-            print("Debug: add noise")
+            # print("Debug: add noise")
         else:
             self.add_noise = False
             
@@ -138,9 +138,9 @@ class TSOfflineTrainer(tianshou.trainer.OfflineTrainer):
         if self.add_noise:
             self._policy_origin_process_fn = self.policy.process_fn
             
-            def _process_fn_with_noise(policy, batch: tianshou.data.Batch, buffer: tianshou.data.ReplayBuffer, indices: np.ndarray) -> tianshou.data.Batch:
-                print("Debug: add noise")
-                batch = self._policy_origin_process_fn(policy,batch, buffer, indices)
+            def _process_fn_with_noise(batch: tianshou.data.Batch, buffer: tianshou.data.ReplayBuffer, indices: np.ndarray) -> tianshou.data.Batch:
+                # print("Debug: add noise")
+                batch = self._policy_origin_process_fn(batch, buffer, indices)
                 for key in batch.keys():
                     if key in ['obs', 'obs_next', 'act', 'rew']:
                         batch[key] = batch[key] + np.random.normal(0, self.random_noise, batch[key].shape)

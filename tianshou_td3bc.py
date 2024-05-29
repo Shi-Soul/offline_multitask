@@ -270,6 +270,7 @@ def test_td3_bc():
             save_best_fn=save_best_fn,
             eval_fn=get_ts_eval_fn(seed=args.seed, ADD_TASKBIT=ADD_TASKBIT,logger=logger),
             eval_every_epoch=args.eval_freq,
+            random_noise = args.random_noise,
             logger=logger or tianshou.utils.LazyLogger(),
         ).run()
         pprint.pprint(result)
