@@ -142,7 +142,7 @@ class TSOfflineTrainer(tianshou.trainer.OfflineTrainer):
                 # print("Debug: add noise")
                 batch = self._policy_origin_process_fn(batch, buffer, indices)
                 for key in batch.keys():
-                    if key in ['obs', 'obs_next', 'act', 'rew']:
+                    if key in ['obs', 'obs_next']:
                         batch[key] = batch[key] + np.random.normal(0, self.random_noise, batch[key].shape)
                 return batch
             

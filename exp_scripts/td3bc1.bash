@@ -21,4 +21,4 @@ CUDA_VISIBLE_DEVICES=0 python tianshou_td3bc.py --random_noise=-1 --ADD_TASKBIT=
 
 # Wait for all the jobs to finish
 wait
-echo "Finish:
+echo "Finish:"

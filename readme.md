@@ -4,9 +4,6 @@
 Baseline
 - Dataset Expert Performance: 
     - run (318.36557 251.48225), walk (962.8321 929.83185)   
-- Random Policy Performance: 
-    - walk 56, run 29
-
 
 - Exp
     - 每个setting 训3次, eval时取100个episodes, 需要保留最佳模型
@@ -75,6 +72,7 @@ tianshou_cql results
     - does adding noise help?
 - (working) interface
     - 需要把最佳模型包装起来, 做成agent_example能调用的形式
+    - remain: decision transformer
 
 
 ## Experience Results

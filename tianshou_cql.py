@@ -22,7 +22,7 @@ from util import *
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
 ind = time.strftime("%Y%m%d-%H%M%S")
-CKPT_NAME = os.path.join('ckpt','ts_td3+bc',ind)
+CKPT_NAME = os.path.join('ckpt','ts_cql',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 
@@ -39,8 +39,8 @@ def get_args():
     parser.add_argument("--alpha-lr", type=float, default=1e-4)
     parser.add_argument("--cql-alpha-lr", type=float, default=3e-4)
     parser.add_argument("--start-timesteps", type=int, default=10000)
-    parser.add_argument("--epoch", type=int, default=200)
-    parser.add_argument("--step-per-epoch", type=int, default=1000)
+    parser.add_argument("--epoch", type=int, default=100)
+    parser.add_argument("--step-per-epoch", type=int, default=2500)
     parser.add_argument("--n-step", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=128)
 
