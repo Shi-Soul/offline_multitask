@@ -39,13 +39,15 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
+    task_bit = variant['task_bit']
+    random_noise = variant['noise']
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'dmc_walk':
         # env = dmc.make('walker_walk', seed=1)
         # env = dmc2gym.make(domain_name='walker', task_name='walk', seed=1)
-        env = get_gym_env('walk')
+        env = get_gym_env('walk', ADD_TASKBIT=task_bit)
         max_ep_len = 1000
         env_targets = [1000, 500, 300, 200]  # evaluation conditioning targets
         scale = 1000.  # normalization for rewards/returns
@@ -53,7 +55,7 @@ def experiment(
     elif env_name == 'dmc_run':
         # env = dmc.make('walker_run', seed=1)
         # env = dmc2gym.make(domain_name='walker', task_name='run', seed=1)
-        env = get_gym_env('run')
+        env = get_gym_env('run', ADD_TASKBIT=task_bit)
         max_ep_len = 1000
         env_targets = [1000, 500, 300, 200]
         scale = 1000.
@@ -341,6 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_iters', type=int, default=10)
     parser.add_argument('--num_steps_per_iter', type=int, default=1000)
     parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--save_model', type=bool, default=False)
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
     parser.add_argument('--task_bit', type=bool, default=True)
     parser.add_argument('--noise', type=int, default=0)
