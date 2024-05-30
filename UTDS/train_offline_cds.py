@@ -3,6 +3,9 @@ import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 import os
+import sys
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# sys.path.append('../')
 import random
 os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 # os.environ['MUJOCO_GL'] = 'egl'
@@ -54,11 +57,15 @@ def eval(global_step, agent, env, logger, num_eval_episodes, video_recorder):
 
 		episode += 1
 		video_recorder.save(f'{global_step}.mp4')
+		
+	print('episode_reward', total_reward / episode)
+	print('episode_length', step / episode)
+	print('step', global_step)
 
-	with logger.log_and_dump_ctx(global_step, ty='eval') as log:
-		log('episode_reward', total_reward / episode)
-		log('episode_length', step / episode)
-		log('step', global_step)
+	# with logger.log_and_dump_ctx(global_step, ty='eval') as log:
+	# 	log('episode_reward', total_reward / episode)
+	# 	log('episode_length', step / episode)
+	# 	log('step', global_step)
 
 
 # @hydra.main(config_path='.', config_name='config_cds')
@@ -102,7 +109,11 @@ def main(cfg):
 		task = cfg.share_task[task_id]          # dataset task
 		data_type = cfg.data_type[task_id]      # dataset type [random, medium, medium-replay, expert, replay]
 		datasets_dir = work_dir / cfg.replay_buffer_dir      # 存储数据的目录
-		replay_dir = datasets_dir.resolve() / Path(task+"-td3-"+str(data_type)) / 'data'
+		# replay_dir = datasets_dir.resolve() / Path(task+"-td3-"+str(data_type)) / 'data'
+		if task == 'walker_walk':
+			replay_dir = '../collected_data/walker_walk-td3-medium/data'
+		if task == 'walker_run':
+			replay_dir = '../collected_data/walker_run-td3-medium/data'
 		print(f'replay dir: {replay_dir}')
 		if task == cfg.task:
 			replay_dir_list_main.append(replay_dir)
@@ -148,7 +159,8 @@ def main(cfg):
 	while train_until_step(global_step):
 		# try to evaluate
 		if eval_every_step(global_step):
-			logger.log('eval_total_time', timer.total_time(), global_step)
+			print('eval_total_time', timer.total_time(), global_step)
+			# logger.log('eval_total_time', timer.total_time(), global_step)
 			eval(global_step, agent, env, logger, cfg.num_eval_episodes, video_recorder)
 
 		# train the agent
@@ -158,10 +170,13 @@ def main(cfg):
 		logger.log_metrics(metrics, global_step, ty='train')
 		if log_every_step(global_step):
 			elapsed_time, total_time = timer.reset()
-			with logger.log_and_dump_ctx(global_step, ty='train') as log:
-				log('fps', cfg.log_every_steps / elapsed_time)
-				log('total_time', total_time)
-				log('step', global_step)
+			print('fps', cfg.log_every_steps / elapsed_time)
+			print('total_time', total_time)
+			print('step', global_step)
+			# with logger.log_and_dump_ctx(global_step, ty='train') as log:
+			# 	log('fps', cfg.log_every_steps / elapsed_time)
+			# 	log('total_time', total_time)
+			# 	log('step', global_step)
 
 		global_step += 1
 

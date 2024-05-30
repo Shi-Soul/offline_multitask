@@ -4,6 +4,7 @@ import random
 import traceback
 import copy
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -75,7 +76,9 @@ class OfflineReplayBuffer(IterableDataset):
 				worker_id = 0
 			print(f'Loading data from {_replay_dir} and Relabel...', "worker_id:", worker_id)      # each worker will run this function
 			print(f"Need relabeling: {relable and _task_share != self._main_task}")
+			_replay_dir = Path(_replay_dir)
 			eps_fns = sorted(_replay_dir.glob('*.npz'))
+			# eps_fns = sorted(_replay_dir.glob('*.npz'))
 			for eps_fn in eps_fns:
 				if self._size > self._max_size:
 					break
