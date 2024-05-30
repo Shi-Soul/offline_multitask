@@ -26,7 +26,7 @@ from util import *
 default_seed=1
 PWD = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ind = time.strftime("%Y%m%d-%H%M%S")
-CKPT_NAME = os.path.join('ckpt','dt',ind)
+CKPT_NAME = os.path.join('ckpt','dt_exp',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 def make_trajs(dataset_file_paths):
@@ -321,7 +321,7 @@ def experiment(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='dmc_run')
+    # parser.add_argument('--env', type=str, default='dmc_run')
     # parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, all
     parser.add_argument('--USE_DATASET_STR', type=str, default='__all__') 
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
@@ -342,7 +342,7 @@ def main():
     parser.add_argument('--num_steps_per_iter', type=int, default=1000)
     parser.add_argument('--device', type=str, default='cuda')
     
-    parser.add_argument('--save_model', type=bool, default=False)
+    parser.add_argument('--save_model', type=bool, default=True)
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
     parser.add_argument('--task_bit', type=bool, default=True)
     parser.add_argument('--noise', type=float, default=-1)

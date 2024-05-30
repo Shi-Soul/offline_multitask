@@ -131,6 +131,8 @@ pip install imageio #
 
 # for morel
 pip install comet_ml  #3.42.1
+
+pip install "transformers==4.36"
 ```
 
 ```bash
