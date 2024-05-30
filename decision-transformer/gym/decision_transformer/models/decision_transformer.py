@@ -138,3 +138,9 @@ class DecisionTransformer(TrajectoryModel):
             states, actions, None, returns_to_go, timesteps, attention_mask=attention_mask, **kwargs)
 
         return action_preds[0,-1]
+
+    def save(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def load(self, path):
+        self.load_state_dict(torch.load(path))
