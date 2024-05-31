@@ -142,7 +142,7 @@ class TSOfflineTrainer(tianshou.trainer.OfflineTrainer):
                 # print("Debug: add noise")
                 batch = self._policy_origin_process_fn(batch, buffer, indices)
                 for key in batch.keys():
-                    if key in ['obs', 'obs_next', 'act', 'rew']:
+                    if key in ['obs', 'obs_next']:
                         batch[key] = batch[key] + np.random.normal(0, self.random_noise, batch[key].shape)
                 return batch
             
@@ -161,7 +161,7 @@ def get_ts_eval_fn(seed=1, ADD_TASKBIT=True,logger: Optional[tianshou.utils.Base
         # Run policy in walk and run envs   
         # Report mean and std of rewards
         agent.policy = self.policy
-        self.policy.eval()
+        # self.policy.eval()
         res = eval_agent_fast(agent, eval_episodes=10,seed=seed)
         if logger is not None:
             logger.write( "eval",self.epoch, {

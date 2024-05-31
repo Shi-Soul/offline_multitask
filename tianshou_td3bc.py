@@ -55,7 +55,7 @@ def get_args():
     parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
-    parser.add_argument("--epoch", type=int, default=500)
+    parser.add_argument("--epoch", type=int, default=150)
     parser.add_argument("--step-per-epoch", type=int, default=2000)
     parser.add_argument("--n-step", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=256)
