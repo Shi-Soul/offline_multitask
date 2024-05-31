@@ -1,7 +1,7 @@
 import warnings
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
-
+import time 
 import os
 import sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -180,6 +180,8 @@ def main(cfg):
 
 		global_step += 1
 
+	torch.save(agent.actor, f'actor_{cfg.task}_{time.time()}_{cfg.hidden_dim}.pth')
+	torch.save(agent.critic, f'critic_{cfg.task}_{time.time()}_{cfg.hidden_dim}.pth')
 
 if __name__ == '__main__':
 	with open('config_cds.yaml', 'r') as file:

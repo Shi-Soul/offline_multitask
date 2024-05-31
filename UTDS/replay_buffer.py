@@ -51,7 +51,7 @@ def relable_episode(env, episode):   # relabel the reward function
 
 class OfflineReplayBuffer(IterableDataset):
 	# 用于 offline training 的 dataset
-	def __init__(self, env, replay_dir_list, max_size, num_workers, discount, main_task, task_list):
+	def __init__(self, env, replay_dir_list, max_size, num_workers, discount, main_task, task_list, noise = 0):
 		self._env = env
 		self._replay_dir_list = replay_dir_list
 		self._size = 0
@@ -63,6 +63,7 @@ class OfflineReplayBuffer(IterableDataset):
 		self._loaded = False
 		self._main_task = main_task
 		self._task_list = task_list
+		self.noise = noise
 
 	def _load(self, relable=True):
 		print("load data", self._replay_dir_list, self._task_list)
@@ -113,7 +114,8 @@ class OfflineReplayBuffer(IterableDataset):
 		episode, eps_flag = self._sample_episode()   # return the signal
 		# add +1 for the first dummy transition
 		idx = np.random.randint(0, episode_len(episode)) + 1
-		obs = episode['observation'][idx - 1]
+		obs = episode['observation'][idx - 1] 
+		obs += np.random.randn(*obs.shape) * self.noise
 		action = episode['action'][idx]
 		next_obs = episode['observation'][idx]
 		reward = episode['reward'][idx]
