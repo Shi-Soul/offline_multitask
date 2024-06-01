@@ -62,8 +62,8 @@ def get_args():
     parser.add_argument("--n-step", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=256)
 
-    parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--exploration-noise", type=float, default=0.03)
+    parser.add_argument("--alpha", type=float, default=2.5)
+    parser.add_argument("--exploration-noise", type=float, default=0.1)
     parser.add_argument("--policy-noise", type=float, default=0.1)
     parser.add_argument("--noise-clip", type=float, default=0.5)
     parser.add_argument("--update-actor-freq", type=int, default=2)
