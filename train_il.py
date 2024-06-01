@@ -23,7 +23,7 @@ PWD = os.path.dirname(os.path.abspath(__file__))
 device = jax.devices("cpu")[0]
 # device = jax.devices("gpu")[0]
 # assert device.platform=="gpu"
-ind = time.strftime("%Y%m%d-%H%M%S")
+ind = time.strftime("%Y%m%d-%H%M%S")+str(np.random.randint(1000))
 CKPT_DIR = os.path.join(PWD, 'ckpt','il',ind)
 
 class MLPAgent:

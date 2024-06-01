@@ -48,12 +48,13 @@ class Config():
             Usage: python train_cqlsac.py train --num_epochs=600 --learning_rate=0.001 --batch_size=2048 --random_noise=-1 --target_update_interval=20 --save_model_interval=100 --soft_update_tau=0.9 --sac_config.gamma=0.999 --sac_config.min_q_weight=0.003 --sac_config.num_act_samples=30 --sac_config.alpha_init=0.02 --sac_config.lambda_critics=1.0 --sac_config.entropy_target=1.0 --sac_config.log_std_upper_bound=2.0 --sac_config.log_std_lower_bound=-20.0
         """
         for key in kwargs:
-            if key.startwith("sac_config"):
+            if key.startswith("sac_config"):
                 name = key.split(".")[1]
                 if name in self.sac_config:
                     self.sac_config[name] = kwargs[key]
                 else:
                     raise ValueError(f"Invalid argument {key}, Only {self.sac_config.keys()} are allowed")
+                continue
             if hasattr(self, key):
                 setattr(self, key, kwargs[key])
             else:

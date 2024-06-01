@@ -25,7 +25,9 @@ from util import *
 
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
-ind = time.strftime("%Y%m%d-%H%M%S")
+# ind = time.strftime("%Y%m%d-%H%M%S")
+
+ind = time.strftime("%Y%m%d-%H%M%S")+str(np.random.randint(1000))
 CKPT_NAME = os.path.join('ckpt','ts_td3+bc',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 

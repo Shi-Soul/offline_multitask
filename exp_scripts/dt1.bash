@@ -11,14 +11,14 @@ set -e
 
 # USE/NONUSE taskbit
 echo "TD3BC: Exp on USE/NONUSE taskbit"
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit False --noise -1 --save_model True
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit True --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit False --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit True --noise -1 --save_model True
 
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR walk_m,walk_mr --task_bit False --noise -1 --save_model True
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR walk_m,walk_mr --task_bit True --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR walk_m,walk_mr --task_bit False --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR walk_m,walk_mr --task_bit True --noise -1 --save_model True
 
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR run_m,run_mr --task_bit False --noise -1 --save_model True
-# CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR run_m,run_mr --task_bit True --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR run_m,run_mr --task_bit False --noise -1 --save_model True
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR run_m,run_mr --task_bit True --noise -1 --save_model True
 
 # Wait for all the jobs to finish
 wait
