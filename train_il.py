@@ -1,3 +1,7 @@
+
+import os
+os.environ['MUJOCO_GL'] = 'egl'
+os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -13,12 +17,12 @@ from functools import partial
 import fire
 import time
 from util import *
-import os
 
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
-device = jax.devices("gpu")[0]
-assert device.platform=="gpu"
+device = jax.devices("cpu")[0]
+# device = jax.devices("gpu")[0]
+# assert device.platform=="gpu"
 ind = time.strftime("%Y%m%d-%H%M%S")
 CKPT_DIR = os.path.join(PWD, 'ckpt','il',ind)
 
@@ -247,23 +251,55 @@ def test(ADD_TASK_BIT=True,
     agent = MLPAgent(state, OBS_DIM, ACT_DIM,ADD_TASK_BIT)
     eval_agent_fast(agent, eval_episodes=100,seed=SEED, method='naive')
     
+def vis():
+    SEED=1
+    ADD_TASK_BIT=True
+    np.random.seed(SEED)
+    init_rng = jax.random.key(SEED)
+
+    learning_rate = 0.005
+    momentum = 0.9
+    
+    model = MLP(ACT_DIM)
+    state = create_train_state(model, init_rng, learning_rate, momentum,ADD_TASK_BIT=ADD_TASK_BIT)
+    state = checkpoints.restore_checkpoint(ckpt_dir="/home/wjxie/wjxie/env/offline_multitask/ckpt/il/20240529-092224/checkpoint_0"
+                                           , target=state)
+    state = jax.device_put(state, device)
+    # inference
+    # act = state.apply_fn({'params': state.params}, batch['obs'])
+    agent = MLPAgent(state, OBS_DIM, ACT_DIM,ADD_TASK_BIT)
+    
+    
+    env = dmc.make('walker_walk', seed=0)
+    from pathlib import Path
+    from UTDS.video import VideoRecorder
+    from UTDS import utils
+    video_recorder = VideoRecorder((Path.cwd()))   
+    def eval(global_step, agent, env, logger, num_eval_episodes, video_recorder):
+        step, episode, total_reward = 0, 0, 0
+        eval_until_episode = utils.Until(num_eval_episodes)
+        while eval_until_episode(episode):
+            time_step = env.reset()
+            video_recorder.init(env, enabled=(episode == 0))
+            while not time_step.last():
+                action = agent.act(time_step.observation)
+                time_step = env.step(action)
+                video_recorder.record(env)
+                total_reward += time_step.reward
+                step += 1
+
+            episode += 1
+            video_recorder.save(f'{global_step}.mp4')
+            
+        print('episode_reward', total_reward / episode)
+        print('episode_length', step / episode)
+        print('step', global_step)
+    eval(0, agent, env, None, 10, video_recorder)
+    
         
 if __name__=="__main__":
-    # try:
-    #     args = sys.argv[1:]
-    #     start_time = time.time()
-    #     ret= fire.Fire({
-    #         'train': main,
-    #         'test': test
-    #     })
-    #     end_time = time.time()
-    #     print(ret)
-    #     print("Args: ", args)
-    #     print("Program Running time: ", end_time-start_time)
-    # except Exception as e:
-    #     print(">>BUG: ",e)
-    #     import pdb;pdb.post_mortem()
     smart_run({
             'train': main,
-            'test': test
+            'test': test,
+            'vis': vis,
         },log_dir=CKPT_DIR)

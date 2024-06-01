@@ -15,14 +15,14 @@ from tianshou.data import Collector
 from tianshou.env import SubprocVectorEnv
 from tianshou.policy import CQLPolicy
 from tianshou.trainer import offline_trainer
-from tianshou.utils import TensorboardLogger, WandbLogger
+from tianshou.utils import TensorboardLogger, WandbLogger, LazyLogger
 from tianshou.utils.net.common import Net
 from tianshou.utils.net.continuous import ActorProb, Critic
 from util import *
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
 ind = time.strftime("%Y%m%d-%H%M%S")
-CKPT_NAME = os.path.join('ckpt','ts_cql_final',ind)
+CKPT_NAME = os.path.join('ckpt','ts_cql_debug',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 
@@ -63,8 +63,8 @@ def get_args():
     parser.add_argument(
         "--logger",
         type=str,
-        default="wandb",
-        choices=["tensorboard", "wandb"],
+        default="none",
+        choices=["tensorboard", "wandb", "none"],
     )
     parser.add_argument("--wandb-project", type=str, default="rlp_cql")
     parser.add_argument(
@@ -204,7 +204,11 @@ def test_cql():
     log_path = CKPT_DIR
 
     # logger
-    if args.logger == "wandb":
+    writer = SummaryWriter(log_path)
+    writer.add_text("args", str(args))
+    if args.logger == "tensorboard":
+        logger = TensorboardLogger(writer)
+    elif args.logger == "wandb":  # wandb
         logger = WandbLogger(
             save_interval=1,
             name=log_name.replace(os.path.sep, "__"),
@@ -212,50 +216,32 @@ def test_cql():
             config=args,
             project=args.wandb_project,
         )
-    writer = SummaryWriter(log_path)
-    writer.add_text("args", str(args))
-    if args.logger == "tensorboard":
-        logger = TensorboardLogger(writer)
-    else:  # wandb
         logger.load(writer)
+    else:
+        logger = LazyLogger()
 
 
     def save_best_fn(policy):
         torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
 
-    def watch():
-        if args.resume_path is None:
-            args.resume_path = os.path.join(log_path, "policy.pth")
 
-        policy.load_state_dict(
-            torch.load(args.resume_path, map_location=torch.device("cpu"))
-        )
-        policy.eval()
-        collector = Collector(policy, env)
-        collector.collect(n_episode=1, render=args.render)
-        # collector.collect(n_episode=1, render=1 / 35)
-
-    if not args.watch:
-        # trainer
-        result = TSOfflineTrainer(
-            policy,
-            replay_buffer,
-            test_collector,
-            args.epoch,
-            args.step_per_epoch,
-            args.test_num,
-            args.batch_size,
-            save_best_fn=save_best_fn,
-            eval_fn=get_ts_eval_fn(seed=args.seed, ADD_TASKBIT=ADD_TASKBIT,logger=logger),
-            eval_every_epoch=args.eval_freq,
-            random_noise = args.random_noise,
-            logger=logger,
-        ).run()
-        pprint.pprint(result)
-    else:
-        watch()
-
-    # Let's watch its performance!
+    # trainer
+    result = TSOfflineTrainer(
+        policy,
+        replay_buffer,
+        test_collector,
+        args.epoch,
+        args.step_per_epoch,
+        args.test_num,
+        args.batch_size,
+        save_best_fn=save_best_fn,
+        eval_fn=get_ts_eval_fn(seed=args.seed, ADD_TASKBIT=ADD_TASKBIT,logger=logger),
+        eval_every_epoch=args.eval_freq,
+        random_noise = args.random_noise,
+        logger=logger,
+    ).run()
+    pprint.pprint(result)
+        
     policy.eval()
     test_envs.seed(args.seed)
     test_collector.reset()
@@ -271,5 +257,6 @@ def test_cql():
     return (result,args)
 
 if __name__ == "__main__":
-    smart_run(test_cql,log_dir=CKPT_DIR,fire=False)
-    # CUDA_VISIBLE_DEVICES=2 python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="walk_m,walk_mr" --task walk                
+    smart_run(test_cql,log_dir=None,fire=False)
+    # CUDA_VISIBLE_DEVICES=2 python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="walk_m,walk_mr" --task walk 
+    # CUDA_VISIBLE_DEVICES=1 python tianshou_cql.py --hidden-sizes 1024 1024 --alpha 0 --batch-size 1024 --tau 0.01 --cql-weight 50            #    

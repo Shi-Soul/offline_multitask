@@ -33,6 +33,7 @@ def load_episode(fn):
 
 
 def relable_episode(env, episode):   # relabel the reward function
+	import pdb;pdb.set_trace()
 	rewards = []
 	reward_spec = env.reward_spec()
 	states = episode['physics']
@@ -65,7 +66,7 @@ class OfflineReplayBuffer(IterableDataset):
 		self._task_list = task_list
 		self.noise = noise
 
-	def _load(self, relable=True):
+	def _load(self, relable=False):
 		print("load data", self._replay_dir_list, self._task_list)
 		for i in range(len(self._replay_dir_list)):       # loop
 			_replay_dir = self._replay_dir_list[i]
@@ -77,6 +78,7 @@ class OfflineReplayBuffer(IterableDataset):
 				worker_id = 0
 			print(f'Loading data from {_replay_dir} and Relabel...', "worker_id:", worker_id)      # each worker will run this function
 			print(f"Need relabeling: {relable and _task_share != self._main_task}")
+			assert (relable and _task_share != self._main_task) == False, "Relabeling is not allowed"
 			_replay_dir = Path(_replay_dir)
 			eps_fns = sorted(_replay_dir.glob('*.npz'))
 			# eps_fns = sorted(_replay_dir.glob('*.npz'))

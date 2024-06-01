@@ -128,13 +128,13 @@ def main(cfg):
 	replay_iter_main = iter(replay_loader_main)      # run OfflineReplayBuffer.sample function
 
 	print("CDS.  load share dataset..", share_tasks)
-	# print("DEBUG: Try to not add shared data")
-	# replay_loader_share = make_replay_loader(env, replay_dir_list_main, cfg.replay_buffer_size,
-	# 			cfg.batch_size // 2, cfg.replay_buffer_num_workers, cfg.discount,      # batch size (half)
-	# 			main_task=cfg.task, task_list=[cfg.task])
-	replay_loader_share = make_replay_loader(env, replay_dir_list_share, cfg.replay_buffer_size,
-				cfg.batch_size // 2 * 10, cfg.replay_buffer_num_workers, cfg.discount,  # batch size是10倍，后取top10
-				main_task=cfg.task, task_list=share_tasks)
+	print("DEBUG: Try to not add shared data")
+	replay_loader_share = make_replay_loader(env, replay_dir_list_main, cfg.replay_buffer_size,
+				cfg.batch_size // 2, cfg.replay_buffer_num_workers, cfg.discount,      # batch size (half)
+				main_task=cfg.task, task_list=[cfg.task])
+	# replay_loader_share = make_replay_loader(env, replay_dir_list_share, cfg.replay_buffer_size,
+	# 			cfg.batch_size // 2 * 10, cfg.replay_buffer_num_workers, cfg.discount,  # batch size是10倍，后取top10
+	# 			main_task=cfg.task, task_list=share_tasks)
 	replay_iter_share = iter(replay_loader_share)     # run OfflineReplayBuffer.sample function
 	print("load data done.")
 
@@ -149,7 +149,7 @@ def main(cfg):
 	global_step = 0
 
 	train_until_step = utils.Until(cfg.num_grad_steps)
-	eval_every_step = utils.Every(cfg.eval_every_steps)
+	eval_every_step = utils.Every(2500)
 	log_every_step = utils.Every(cfg.log_every_steps)
 
 	if cfg.wandb:
@@ -173,8 +173,8 @@ def main(cfg):
 			print('eval_total_time', timer.total_time(), global_step)
 			# logger.log('eval_total_time', timer.total_time(), global_step)
 			eval(global_step, agent, env, logger, cfg.num_eval_episodes, video_recorder)
-			torch.save(agent.actor, f'ckpt/actor_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
-			torch.save(agent.critic, f'ckpt/critic_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
+			# torch.save(agent.actor, f'ckpt/actor_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
+			# torch.save(agent.critic, f'ckpt/critic_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
 
 		# log
 		logger.log_metrics(metrics, global_step, ty='train')

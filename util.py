@@ -446,6 +446,7 @@ class EnvProcess(mp.Process):
     
 
 def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=10, method='mp'):
+    # import pdb;pdb.set_trace()
     assert method in ['mp', 'naive'], f"method should be 'mp' or 'naive', but got {method}"
     print('--'*10+"Start evaluation"+'--'*10)
     num_processes = min(num_processes, eval_episodes)
@@ -540,6 +541,7 @@ def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=10, method='m
     return res
 
 def eval_agent(agent, eval_episodes=100,seed=1):
+    # import pdb;pdb.set_trace()
 # Agent(24, 6)
     def evaluate_env(eval_env, agent, eval_episodes):
         """
