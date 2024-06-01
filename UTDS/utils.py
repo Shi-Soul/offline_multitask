@@ -218,22 +218,6 @@ class SquashedNormal2:
 		# print("in log_prob 0:", action.shape, pre_tanh_value.shape)
 		# print("in log_prob 1:", self.normal.log_prob(pre_tanh_value).shape, logp_pi.shape)
 		logp_pi -= (2 * (np.log(2) - pre_tanh_value - F.softplus(-2 * pre_tanh_value))).sum(dim=-1)
-		# print("in log_prob 2:", logp_pi.shape)
-		# print("is nan 0:", torch.isnan(logp_pi).any())
-		# if torch.isnan(logp_pi).any():
-		# 	print("is nan 1:", torch.isnan(pre_tanh_value).any(), torch.isnan(action).any())
-		# 	print("is nan 2:", torch.isnan(F.softplus(-2 * pre_tanh_value)).any())
-		# 	print("is nan 3:", torch.isnan(self.normal.log_prob(pre_tanh_value)).any())
-		# 	print("is nan 4:", torch.isnan(self.loc).any(), torch.isnan(self.scale).any())
-		# 	print("is nan 5:", torch.isnan((2 * (np.log(2) - pre_tanh_value))).any())
-		# 	print("is nan 6:", torch.isnan(-F.softplus(-2 * pre_tanh_value)).any())
-		# 	print("is nan 7:", torch.isnan(-pre_tanh_value-F.softplus(-2 * pre_tanh_value)).any())
-		# 	print("is nan 8:", torch.isnan(np.log(2)-pre_tanh_value-F.softplus(-2 * pre_tanh_value)).any())
-		# 	print("is nan 9:", np.log(2), pre_tanh_value.shape, F.softplus(-2 * pre_tanh_value).shape)
-		# 	print("is nan 10:", action.mean(), pre_tanh_value.mean(), pre_tanh_value.min(), pre_tanh_value.max(), F.softplus(-2 * pre_tanh_value).mean())
-		# 	print("is nan 11:", torch.isnan(logp_pi).any())
-		# 	print("")
-
 		return logp_pi
 
 	@property

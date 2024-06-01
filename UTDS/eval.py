@@ -27,7 +27,7 @@ torch.backends.cudnn.benchmark = True
 
 import torch
 import numpy as np
-from UTDS.agent.cql_cds import CQLCDSAgent
+from UTDS.agent.cql_cds import CQLCDSAgent, Actor, Critic
 from util import eval_agent_fast, eval_agent
 
 class Eval_UTDS_Agent:
@@ -67,15 +67,15 @@ if __name__ == "__main__":
         has_next_action = cfg.has_next_action,
         device=cfg.device)
     
-    agent.actor= torch.load('actor_walker_walk_1717162661.098715_1024_15000.pth', 
+    agent.actor= torch.load('actor_walker_average_1024.pth', 
                             map_location=torch.device('cuda'))            
     
-    # agent = Eval_UTDS_Agent(agent)
+    agent = Eval_UTDS_Agent(agent)
     
-    # eval_agent_fast(agent, eval_episodes=100,seed=1)
+    eval_agent_fast(agent, eval_episodes=100,seed=1)
     
-    video_recorder = VideoRecorder((Path.cwd()))   
-    from UTDS.train_offline_cds import eval
-    eval(0, agent, env, None, 10, video_recorder)
+    # video_recorder = VideoRecorder((Path.cwd()))   
+    # from UTDS.train_offline_cds import eval
+    # eval(0, agent, env, None, 10, video_recorder)
     
 
