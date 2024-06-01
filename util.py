@@ -60,7 +60,7 @@ class DataLoader:
         ret = {}
         for key in self.data.keys():
             ret[key] = self.data[key][self.idx:self.idx + self.batch_size]
-            if self.random_noise > 0:
+            if self.random_noise > 0 and key in ['obs', 'obs_next']:
                 ret[key] = ret[key] + np.random.normal(0, self.random_noise, ret[key].shape)
         self.idx += self.batch_size
         return ret
@@ -445,7 +445,7 @@ class EnvProcess(mp.Process):
                 raise ValueError(f"Unknown command {cmd}")
     
 
-def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=10, method='mp'):
+def eval_agent_fast(agent, eval_episodes=100,seed=1, num_processes=25, method='mp'):
     # import pdb;pdb.set_trace()
     assert method in ['mp', 'naive'], f"method should be 'mp' or 'naive', but got {method}"
     print('--'*10+"Start evaluation"+'--'*10)

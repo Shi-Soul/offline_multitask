@@ -1,7 +1,7 @@
 
 import os
-os.environ['MUJOCO_GL'] = 'egl'
-os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
+# os.environ['MUJOCO_GL'] = 'egl'
+# os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -20,11 +20,11 @@ from util import *
 
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
-device = jax.devices("cpu")[0]
-# device = jax.devices("gpu")[0]
-# assert device.platform=="gpu"
+# device = jax.devices("cpu")[0]
+device = jax.devices("gpu")[0]
+assert device.platform=="gpu"
 ind = time.strftime("%Y%m%d-%H%M%S")+str(np.random.randint(1000))
-CKPT_DIR = os.path.join(PWD, 'ckpt','il',ind)
+CKPT_DIR = os.path.join(PWD, 'ckpt','il_exp',ind)
 
 class MLPAgent:
     # An example of the agent to be implemented.
@@ -72,15 +72,15 @@ class MLP(nn.Module):                    # create a Flax Module dataclass
         # x = nn.silu(nn.Dense(64)(x))        # create inline Flax Module submodules
         # x = nn.Dropout(0.1, deterministic=False)(x)
         # x = nn.relu(nn.Dense(32)(x))
-        x = nn.silu(nn.Dense(256)(x))
+        x = nn.silu(nn.Dense(512)(x))
         x = nn.LayerNorm()(x)
-        x = nn.silu(nn.Dense(256)(x))+x
-        # x = nn.LayerNorm()(x)
-        # x = nn.silu(nn.Dense(256)(x))+x
-        # x = nn.LayerNorm()(x)
-        # x = nn.silu(nn.Dense(64)(x))
-        # x = nn.LayerNorm()(x)
-        # x = nn.silu(nn.Dense(64)(x))+x
+        x = nn.silu(nn.Dense(512)(x)+x)
+        x = nn.LayerNorm()(x)
+        x = nn.silu(nn.Dense(512)(x)+x)
+        x = nn.LayerNorm()(x)
+        x = nn.silu(nn.Dense(512)(x)+x)
+        x = nn.LayerNorm()(x)
+        x = nn.silu(nn.Dense(512)(x)+x)
         # x = nn.LayerNorm()(x)
         # x = nn.silu(nn.Dense(64)(x))+x
         # x = nn.LayerNorm()(x)

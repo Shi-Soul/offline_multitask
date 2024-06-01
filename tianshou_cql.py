@@ -8,6 +8,7 @@ import pprint
 import gymnasium as gym
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 # from examples.offline.utils import load_buffer_d4rl
@@ -24,7 +25,7 @@ PWD = os.path.dirname(os.path.abspath(__file__))
 # ind = time.strftime("%Y%m%d-%H%M%S")
 
 ind = time.strftime("%Y%m%d-%H%M%S")+str(np.random.randint(1000))
-CKPT_NAME = os.path.join('ckpt','ts_cql_final',ind)
+CKPT_NAME = os.path.join('ckpt','ts_cql',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 
@@ -33,7 +34,7 @@ def get_args():
     parser.add_argument("--task", type=str, default="walk")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--buffer-size", type=int, default=1000000)
-    parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[256, 256])
+    parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[1024, 1024])
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--alpha", type=float, default=0.2)  #alpha for SAC entropy term
@@ -43,13 +44,13 @@ def get_args():
     parser.add_argument("--start-timesteps", type=int, default=10000)
     parser.add_argument("--epoch", type=int, default=100)
     parser.add_argument("--step-per-epoch", type=int, default=2500)
-    parser.add_argument("--n-step", type=int, default=3)
-    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--n-step", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=1024)
 
-    parser.add_argument("--tau", type=float, default=0.005)
+    parser.add_argument("--tau", type=float, default=0.01)
     parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--cql-weight", type=float, default=1.0)
-    parser.add_argument("--with-lagrange", type=bool, default=True)
+    parser.add_argument("--cql-weight", type=float, default=50.0)
+    parser.add_argument("--with-lagrange", type=bool, default=False)
     parser.add_argument("--lagrange-threshold", type=float, default=10.0)
     parser.add_argument("--gamma", type=float, default=0.99)
 
@@ -130,8 +131,30 @@ def test_cql():
     test_envs.seed(args.seed)
 
     # model
+    
+    class MyNet(torch.nn.Module):
+        def __init__(self, in_dim, out_dim, device, hidden_sizes=[256, 256]):
+            super().__init__()
+            self.device = device
+            self.models = torch.nn.ModuleList()
+            for i, hidden_size in enumerate(hidden_sizes):
+                self.models.append(
+                    torch.nn.Sequential(
+                        torch.nn.Linear(in_dim if i == 0 else hidden_sizes[i - 1], hidden_size),
+                        torch.nn.LayerNorm(hidden_size),
+                        torch.nn.SiLU(),
+                        
+                    ).to(device)
+                )
+            self.models.append(torch.nn.Linear(hidden_sizes[-1], out_dim).to(device))
+            
+
+        def forward(self, s):
+            s = self.models(s)
+            return s
+    
     # actor network
-    net_a = Net(
+    net_a = MyNet(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
@@ -148,14 +171,14 @@ def test_cql():
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
 
     # critic network
-    net_c1 = Net(
+    net_c1 = MyNet(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
         concat=True,
         device=args.device,
     )
-    net_c2 = Net(
+    net_c2 = MyNet(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
