@@ -8,7 +8,6 @@ import pprint
 import gymnasium as gym
 import numpy as np
 import torch
-from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 # from examples.offline.utils import load_buffer_d4rl
@@ -44,7 +43,7 @@ def get_args():
     parser.add_argument("--start-timesteps", type=int, default=10000)
     parser.add_argument("--epoch", type=int, default=100)
     parser.add_argument("--step-per-epoch", type=int, default=2500)
-    parser.add_argument("--n-step", type=int, default=1)
+    parser.add_argument("--n-step", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=1024)
 
     parser.add_argument("--tau", type=float, default=0.01)
@@ -132,33 +131,16 @@ def test_cql():
 
     # model
     
-    class MyNet(torch.nn.Module):
-        def __init__(self, in_dim, out_dim, device, hidden_sizes=[256, 256]):
-            super().__init__()
-            self.device = device
-            self.models = torch.nn.ModuleList()
-            for i, hidden_size in enumerate(hidden_sizes):
-                self.models.append(
-                    torch.nn.Sequential(
-                        torch.nn.Linear(in_dim if i == 0 else hidden_sizes[i - 1], hidden_size),
-                        torch.nn.LayerNorm(hidden_size),
-                        torch.nn.SiLU(),
-                        
-                    ).to(device)
-                )
-            self.models.append(torch.nn.Linear(hidden_sizes[-1], out_dim).to(device))
-            
-
-        def forward(self, s):
-            s = self.models(s)
-            return s
+    
     
     # actor network
-    net_a = MyNet(
+    net_a = Net(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
         device=args.device,
+        norm_layer=torch.nn.LayerNorm,
+        activation=torch.nn.SiLU,
     )
     actor = ActorProb(
         net_a,
@@ -171,19 +153,23 @@ def test_cql():
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
 
     # critic network
-    net_c1 = MyNet(
+    net_c1 = Net(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
         concat=True,
         device=args.device,
+        norm_layer=torch.nn.LayerNorm,
+        activation=torch.nn.SiLU,
     )
-    net_c2 = MyNet(
+    net_c2 = Net(
         args.state_shape,
         args.action_shape,
         hidden_sizes=args.hidden_sizes,
         concat=True,
         device=args.device,
+        norm_layer=torch.nn.LayerNorm,
+        activation=torch.nn.SiLU,
     )
     critic1 = Critic(net_c1, device=args.device).to(args.device)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
