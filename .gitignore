@@ -9,3 +9,10 @@ log
 wandb
 *debug*
 morel/results
+
+*.pth
+UTDS/tb
+*mp4
+
+
+

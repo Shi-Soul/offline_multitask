@@ -1,4 +1,4 @@
-import hydra
+# import hydra
 import numpy as np
 import torch
 import torch.nn as nn
@@ -114,7 +114,6 @@ class CQLCDSAgent:
 		self.critic_alpha_opt = torch.optim.Adam([self.log_critic_alpha], lr=actor_lr)
 
 		self.train()
-		# self.critic_target.train()
 
 	def train(self, training=True):
 		self.training = training

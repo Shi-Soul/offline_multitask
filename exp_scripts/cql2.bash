@@ -28,7 +28,7 @@ CUDA_VISIBLE_DEVICES=2 python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=Tr
 # CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=0.1 --ADD_TASKBIT=True --USE_DATASET_STR="run_m,run_mr" --task run
 
 echo "Part3"
-CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk
+# CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk
 # CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=0.00001 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk
 # CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=0.0001 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk
 # CUDA_VISIBLE_DEVICES=0 python tianshou_cql.py --random_noise=0.001 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk

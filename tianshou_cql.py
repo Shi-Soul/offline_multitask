@@ -22,7 +22,7 @@ from util import *
 default_seed=1
 PWD = os.path.dirname(os.path.abspath(__file__))
 ind = time.strftime("%Y%m%d-%H%M%S")
-CKPT_NAME = os.path.join('ckpt','ts_cql_exp',ind)
+CKPT_NAME = os.path.join('ckpt','ts_cql_final',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 
@@ -34,8 +34,8 @@ def get_args():
     parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
-    parser.add_argument("--alpha", type=float, default=0.2)
-    parser.add_argument("--auto-alpha", default=True, action="store_true")
+    parser.add_argument("--alpha", type=float, default=0.2)  #alpha for SAC entropy term
+    parser.add_argument("--auto-alpha", default=True, action="store_true") # auto alpha for SAC entropy term
     parser.add_argument("--alpha-lr", type=float, default=1e-4)
     parser.add_argument("--cql-alpha-lr", type=float, default=3e-4)
     parser.add_argument("--start-timesteps", type=int, default=10000)

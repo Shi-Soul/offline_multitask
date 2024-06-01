@@ -128,6 +128,10 @@ def main(cfg):
 	replay_iter_main = iter(replay_loader_main)      # run OfflineReplayBuffer.sample function
 
 	print("CDS.  load share dataset..", share_tasks)
+	# print("DEBUG: Try to not add shared data")
+	# replay_loader_share = make_replay_loader(env, replay_dir_list_main, cfg.replay_buffer_size,
+	# 			cfg.batch_size // 2, cfg.replay_buffer_num_workers, cfg.discount,      # batch size (half)
+	# 			main_task=cfg.task, task_list=[cfg.task])
 	replay_loader_share = make_replay_loader(env, replay_dir_list_share, cfg.replay_buffer_size,
 				cfg.batch_size // 2 * 10, cfg.replay_buffer_num_workers, cfg.discount,  # batch size是10倍，后取top10
 				main_task=cfg.task, task_list=share_tasks)
@@ -155,16 +159,22 @@ def main(cfg):
 			os.makedirs(wandb_dir)
 		wandb.init(project="UTDS", entity='', config=cfg, name=f'{path_str}_1', dir=wandb_dir)
 		wandb.config.update(vars(cfg))
+	td = time.time()
 
 	while train_until_step(global_step):
+
+		global_step += 1
+
+		# train the agent
+		metrics = agent.update(replay_iter_main, replay_iter_share, global_step, cfg.num_grad_steps)
+  
 		# try to evaluate
 		if eval_every_step(global_step):
 			print('eval_total_time', timer.total_time(), global_step)
 			# logger.log('eval_total_time', timer.total_time(), global_step)
 			eval(global_step, agent, env, logger, cfg.num_eval_episodes, video_recorder)
-
-		# train the agent
-		metrics = agent.update(replay_iter_main, replay_iter_share, global_step, cfg.num_grad_steps)
+			torch.save(agent.actor, f'actor_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
+			torch.save(agent.critic, f'critic_{cfg.task}_{td}_{cfg.hidden_dim}_{global_step}.pth')
 
 		# log
 		logger.log_metrics(metrics, global_step, ty='train')
@@ -178,10 +188,6 @@ def main(cfg):
 			# 	log('total_time', total_time)
 			# 	log('step', global_step)
 
-		global_step += 1
-
-	torch.save(agent.actor, f'actor_{cfg.task}_{time.time()}_{cfg.hidden_dim}.pth')
-	torch.save(agent.critic, f'critic_{cfg.task}_{time.time()}_{cfg.hidden_dim}.pth')
 
 if __name__ == '__main__':
 	with open('config_cds.yaml', 'r') as file:
