@@ -292,8 +292,6 @@ def vis():
             video_recorder.save(f'{global_step}.mp4')
             
         print('episode_reward', total_reward / episode)
-        print('episode_length', step / episode)
-        print('step', global_step)
     eval(0, agent, env, None, 10, video_recorder)
     
         

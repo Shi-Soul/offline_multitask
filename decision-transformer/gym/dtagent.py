@@ -267,9 +267,11 @@ def main():
 
     env_walk = get_gym_env('walk',seed=1, ADD_TASKBIT=task_bit)
     env_run = get_gym_env('run',seed=1, ADD_TASKBIT=task_bit)
+    
     max_ep_len = 1000
-    env_targets = [0.8,1,1000, 800, 500, 300, 200]  # evaluation conditioning targets
     scale = 1000.  # normalization for rewards/returns
+    # env_targets = [0.8,1,1000, 800, 500, 300, 200]  # evaluation conditioning targets
+    env_targets = [0.2,0.3,0.5,0.9,0.99]
 
     state_dim = env_walk.observation_space.shape[0]
     act_dim = env_walk.action_space.shape[0]
@@ -319,7 +321,8 @@ def main():
     dt_agent = DTAgent(dt_model, state_dim-task_bit, act_dim, state_mean, state_std, scale, 1000, device)
     # print(eval_agent(dt_agent, eval_episodes=10,seed=1,))
     for rtg in env_targets:
-        print(eval_agent(dt_agent, eval_episodes=10,seed=1,rtg=rtg))
+        print('rtg:', rtg)
+        print(eval_agent(dt_agent, eval_episodes=10,seed=2,rtg=rtg))
         
     # for env in [env_walk, env_run]:
     #     for target_return in env_targets:
