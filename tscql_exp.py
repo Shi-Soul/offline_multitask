@@ -24,7 +24,7 @@ PWD = os.path.dirname(os.path.abspath(__file__))
 # ind = time.strftime("%Y%m%d-%H%M%S")
 
 ind = time.strftime("%Y%m%d-%H%M%S")+str(np.random.randint(1000))
-CKPT_NAME = os.path.join('ckpt','ts_cql_exp2',ind)
+CKPT_NAME = os.path.join('ckpt','ts_cql_exp',ind)
 CKPT_DIR = os.path.join(PWD, CKPT_NAME)
 
 
@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument("--task", type=str, default="walk")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--buffer-size", type=int, default=1000000)
-    parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[1024, 1024])
+    parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--alpha", type=float, default=0.2)  #alpha for SAC entropy term
@@ -200,6 +200,7 @@ def test_cql():
         min_action=np.min(env.action_space.low),
         max_action=np.max(env.action_space.high),
         device=args.device,
+        clip_grad=1000.0,
     )
 
     # load a previous policy

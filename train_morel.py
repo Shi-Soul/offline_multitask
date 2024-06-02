@@ -145,7 +145,8 @@ def main(args):
 
     agent = Morel(OBS_DIM+1, ACT_DIM, tensorboard_writer = tensorboard_writer, comet_experiment = comet_experiment)
 
-    agent.train(dataloader, dynamics_data, load_dynamics="/home/wjxie/wjxie/env/offline_multitask/morel/results/exp_test_22/models")
+    agent.train(dataloader, dynamics_data, load_dynamics=None)
+    # agent.train(dataloader, dynamics_data, load_dynamics="/home/wjxie/wjxie/env/offline_multitask/morel/results/exp_test_24/models")
 
     if(not args.no_log):
         print("Save at: ", run_log_dir)
