@@ -50,6 +50,8 @@ Performance of each algorithm:
 |---|----|----|
 |Expert|	962.83|	318.37|
 | Random|	  51.86 +-   12.67|	  27.92 +-   3.45|
+|CDS walk|	872.98 +- 238.68|	265.36 +- 70.60|
+|CDS run|	642.05 +- 198.84|	235.70 +- 67.90|
 |||
 |BC|	854.95 +- 207.23|	**308.08** +- 25.12|
 |TD3BC	|933.92 +- 102.27|	275.11 +- 69.71|
@@ -60,7 +62,6 @@ Performance of each algorithm:
 
 ## Logging & Planning
 
-Baseline
 - Dataset Expert Performance: 
     - run (318.36557 251.48225), walk (962.8321 929.83185)   
 
@@ -103,7 +104,7 @@ pip install dm_control # 1.0.18
 pip install gym  # 0.26.2
 
 pip install "jax==0.4.26"
-# pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
     # For CUDA version Jax
 pip install flax #0.8.3
 pip install clu #0.0.12
