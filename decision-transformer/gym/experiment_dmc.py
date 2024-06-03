@@ -106,7 +106,7 @@ def experiment(
     env_walk = get_gym_env('walk',seed=1, ADD_TASKBIT=task_bit)
     env_run = get_gym_env('run',seed=1, ADD_TASKBIT=task_bit)
     max_ep_len = 1000
-    env_targets = [1000, 500, 300, 200]  # evaluation conditioning targets
+    env_targets = [1000, 500, 1.0, 0.97, 0.35]  # evaluation conditioning targets
     scale = 1000.  # normalization for rewards/returns
     if model_type == 'bc':
         env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations

@@ -251,36 +251,43 @@ def test(ADD_TASK_BIT=True,
     agent = MLPAgent(state, OBS_DIM, ACT_DIM,ADD_TASK_BIT)
     eval_agent_fast(agent, eval_episodes=100,seed=SEED, method='naive')
     
-def vis():
-    SEED=1
+def vis(task='walk',SEED=1):
+    # SEED=1
+    assert task in ['walk','run']
     ADD_TASK_BIT=True
     np.random.seed(SEED)
     init_rng = jax.random.key(SEED)
 
     learning_rate = 0.005
     momentum = 0.9
+    # task='walk'
     
     model = MLP(ACT_DIM)
     state = create_train_state(model, init_rng, learning_rate, momentum,ADD_TASK_BIT=ADD_TASK_BIT)
-    state = checkpoints.restore_checkpoint(ckpt_dir="/home/wjxie/wjxie/env/offline_multitask/ckpt/il/20240529-092224/checkpoint_0"
+    state = checkpoints.restore_checkpoint(ckpt_dir="/home/wjxie/wjxie/env/offline_multitask/ckpt/il_exp/20240601-134132567/checkpoint_0"
                                            , target=state)
+    # /home/wjxie/wjxie/env/offline_multitask/ckpt/il_exp/20240601-134132567/log.txt
     state = jax.device_put(state, device)
     # inference
     # act = state.apply_fn({'params': state.params}, batch['obs'])
     agent = MLPAgent(state, OBS_DIM, ACT_DIM,ADD_TASK_BIT)
+    agent.set_task_bit(int(task=='run'))
     
     
-    env = dmc.make('walker_walk', seed=0)
+    env = dmc.make('walker_'+task, seed=0)
+    expname = "taskbit_all"
+    
     from pathlib import Path
     from UTDS.video import VideoRecorder
     from UTDS import utils
     video_recorder = VideoRecorder((Path.cwd()))   
     def eval(global_step, agent, env, logger, num_eval_episodes, video_recorder):
         step, episode, total_reward = 0, 0, 0
+        rew_list = []
         eval_until_episode = utils.Until(num_eval_episodes)
         while eval_until_episode(episode):
             time_step = env.reset()
-            video_recorder.init(env, enabled=(episode == 0))
+            video_recorder.init(env, enabled=True)
             while not time_step.last():
                 action = agent.act(time_step.observation)
                 time_step = env.step(action)
@@ -289,10 +296,14 @@ def vis():
                 step += 1
 
             episode += 1
-            video_recorder.save(f'{global_step}.mp4')
+            rew_list.append(total_reward)
+            total_reward=0
+            video_recorder.save(f'il_{task}_{expname}_{episode}.mp4')
             
-        print('episode_reward', total_reward / episode)
-    eval(0, agent, env, None, 10, video_recorder)
+        print('episode_reward', rew_list)
+        print('rew_mean', np.mean(rew_list))
+        print('rew_std', np.std(rew_list))
+    eval(0, agent, env, None, 3, video_recorder)
     
         
 if __name__=="__main__":

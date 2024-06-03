@@ -1,13 +1,15 @@
-import numpy as np
-import torch
+
 import os 
 import sys
 
+os.environ['MUJOCO_GL'] = 'egl'
+os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 PWD = os.getcwd()
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append('../../')
 from util import *
-
+import numpy as np
+import torch
 from decision_transformer.evaluation.evaluate_episodes import evaluate_episode, evaluate_episode_rtg
 from decision_transformer.models.decision_transformer import DecisionTransformer
 from decision_transformer.models.mlp_bc import MLPBCModel
@@ -86,6 +88,9 @@ class DTAgent:
         return action
     
     def reset_rtg(self,rtg):
+        # if hasattr(self, 'target_return'):
+        #     print("DEBUG: target_return = ", self.target_return)
+        
         self.target_return = torch.tensor(rtg, device=self.device, dtype=torch.float32).reshape(1, 1)
         self.timesteps = torch.tensor(0, device=self.device, dtype=torch.long).reshape(1, 1)
         self.t = 0
@@ -261,6 +266,56 @@ def eval_agent(agent, eval_episodes=100,seed=1, rtg=0.8):
     return scores
 
 
+def vis(agent, task='walk', num_eval_episodes=10,rtg=0.8, name='none',enable=True):
+    assert task in ['walk', 'run']
+    if task == 'walk':
+        env = dmc.make('walker_walk', seed=3)
+        agent.set_task_bit(WALK_BIT)
+    else :
+        env = dmc.make('walker_run', seed=3)
+        agent.set_task_bit(RUN_BIT)
+    from pathlib import Path
+    from UTDS.video import VideoRecorder
+    from UTDS import utils
+    video_recorder = VideoRecorder((Path.cwd()))   
+    
+    step, episode, total_reward = 0, 0, 0
+    fail_cnt = 0
+    eval_until_episode = utils.Until(num_eval_episodes)
+    rew_list = []
+    while eval_until_episode(episode):
+        time_step = env.reset()
+        agent.reset_rtg(rtg)
+        video_recorder.init(env, enabled=enable)
+        while not time_step.last():
+            with torch.no_grad():
+            # with torch.no_grad(), utils.eval_mode(agent):
+                # action = agent.act(time_step.observation)
+                action = agent.act(time_step.observation, time_step.reward)
+            time_step = env.step(action)
+            video_recorder.record(env)
+            total_reward += time_step.reward
+            step += 1
+
+        episode += 1
+        rew_list.append(total_reward)
+        total_reward = 0
+        video_name = f'dt_{name}_{task}_{rtg}_{episode}.mp4'
+        if rew_list[-1] < 1000*rtg*0.5:
+            # fail
+            fail_cnt += 1
+            print("Fail case: ", video_name)
+        else:
+            video_name = f'dt_{name}_{task}_{rtg}__.mp4'
+            
+        video_recorder.save(video_name)
+        
+    print('episode_reward', rew_list)
+    print('episode_reward_mean', np.mean(rew_list))
+    print('episode_reward_std', np.std(rew_list) )
+    print('episode_length', step / episode)
+    print("fail cnt: ", fail_cnt)
+
 def main():
     device = 'cuda'
     task_bit = 1
@@ -304,6 +359,7 @@ def main():
                 resid_pdrop=variant['dropout'],
                 attn_pdrop=variant['dropout'],
             ).to(device)
+    # dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/dt_exp/20240602-100555709/9.pt")
     dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/_dt/9.pt")
     
     dataset_file_paths = from_datasetstr_to_datasetfilepath(variant['USE_DATASET_STR'])
@@ -320,13 +376,27 @@ def main():
         
     dt_agent = DTAgent(dt_model, state_dim-task_bit, act_dim, state_mean, state_std, scale, 1000, device)
     # print(eval_agent(dt_agent, eval_episodes=10,seed=1,))
-    for rtg in env_targets:
-        print('rtg:', rtg)
-        print(eval_agent(dt_agent, eval_episodes=10,seed=2,rtg=rtg))
+    # for rtg in env_targets:
+    #     print('rtg:', rtg)
+    #     print(eval_agent(dt_agent, eval_episodes=10,seed=2,rtg=rtg))
+    
+    vis(dt_agent,'walk', num_eval_episodes=400,rtg=0.999,name='baseline',enable=False)
+    # vis(dt_agent,'walk', num_eval_episodes=400,rtg=0.999,name='noise',enable=False)
+    
+    # vis(dt_agent,'run', num_eval_episodes=300,rtg=0.32,name='baseline',enable=False)
+    # vis(dt_agent,'run', num_eval_episodes=300,rtg=0.32,name='noise',enable=False)
+    
+    # walk: (rtg=0.999)
+    # baseline: fail: 6/500
+    # noise: fail 3/500
+    
+    # run: (rtg=0.32)
+    # baseline: 12/500
+    # noise: 17/500
+    
+    
+    # vis(dt_agent,'run', num_eval_episodes=10,rtg=.31)
         
-    # for env in [env_walk, env_run]:
-    #     for target_return in env_targets:
-    #         print(eval_episodes(target_return, 2, env, env, 2, 2, max_ep_len, scale, 0, 1, 'cuda', mode='normal')(dt_model))
     
     
 if __name__ == "__main__":
