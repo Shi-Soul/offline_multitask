@@ -362,16 +362,30 @@ def main():
     # dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/dt_exp/20240602-100555709/9.pt")
     dt_model.load("../../model_dt_best.pt")
     # dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/_dt/9.pt")
-    
-    dataset_file_paths = from_datasetstr_to_datasetfilepath(variant['USE_DATASET_STR'])
-    trajectories = make_trajs(dataset_file_paths)
-    states, traj_lens, returns = read_data(trajectories,mode,variant['task_bit'])
-    traj_lens, returns = np.array(traj_lens), np.array(returns)
-    print('########### Data Loaded! ###########')
 
-    # used for input normalization
-    states = np.concatenate(states, axis=0)
-    state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+#     dataset_file_paths = from_datasetstr_to_datasetfilepath(variant['USE_DATASET_STR'])
+#     trajectories = make_trajs(dataset_file_paths)
+#     states, traj_lens, returns = read_data(trajectories,mode,variant['task_bit'])
+#     traj_lens, returns = np.array(traj_lens), np.array(returns)
+#     print('########### Data Loaded! ###########')
+# 
+#     # used for input normalization
+#     states = np.concatenate(states, axis=0)
+#     state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+
+    # Here we hardcode the state_mean and state_std, for ease evaluation
+    state_mean = np.array([ 9.31270788e-01, -6.56689485e-02,  7.83823628e-01, -3.48372718e-01,
+  5.37133719e-01,  6.69629078e-01,  4.76454052e-01,  4.68625933e-01,
+  8.82615255e-01,  7.20799534e-02,  5.24125645e-01,  7.15013248e-01,
+  4.73387288e-01,  2.81045324e-01,  1.09207265e+00, -9.45097368e-03,
+  1.59500805e+00, -1.04131104e-03, -1.72432532e-02,  1.78307676e-02,
+  3.09820980e-02, -3.02996599e-02,  1.19112037e-02,  5.32888793e-03,
+  5.00000000e-01])
+    state_std = np.array([0.22458547, 0.27925738, 0.29520055, 0.42085037, 0.40492277, 0.31483846,
+    0.59775127, 0.44280557, 0.26616778, 0.38072404, 0.38143853, 0.26182876,
+    0.69636542, 0.46042971, 0.20927246, 1.59334934, 0.62619761, 4.48222262,
+    9.71117892, 6.18426965, 8.2479309,  9.39151823, 6.45248379, 7.34752834,
+    0.500001  ])
     # print('state_mean:', state_mean)
     # print('state_std:', state_std)
         
@@ -386,14 +400,6 @@ def main():
     
     vis(dt_agent,'run', num_eval_episodes=10,rtg=0.32,name='baseline',enable=False)
     # vis(dt_agent,'run', num_eval_episodes=300,rtg=0.32,name='noise',enable=False)
-    
-    # walk: (rtg=0.999)
-    # baseline: fail: 6/500
-    # noise: fail 3/500
-    
-    # run: (rtg=0.32)
-    # baseline: 12/500
-    # noise: 17/500
     
     
     # vis(dt_agent,'run', num_eval_episodes=10,rtg=.31)

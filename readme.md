@@ -12,25 +12,12 @@ We also write some codes for multi-processing parallel evaluation(see `util.py`)
 We include our best Decision Transformer model as the final agent. The agent can be evaluated in the following way:
 
 ```bash 
-# Please ensure the collected_data is set up properly, and the model_dt_best.pt is in the root dir.
-
-# To setup dataset, please:
-# First Get Project.zip (From project requirement) in this dir
-unzip Project.zip project/collected_data/*
-mv project/collected_data/ .
-rm -r project
-
-cp -r collected_data collected_data_old
-python data_transform_.py
-
 # Run evaluation
 ls model_dt_best.pt
 python decision-transformer/gym/dtagent.py
 
 # Evaluation Output should look like:
 
-# 100%|██████████████████████████████████████████████████████████████████████████████████████| 204/204 [00:00<00:00, 590.41it/s]
-# ########### Data Loaded! ###########
 # episode_reward [849.8103782379474, 962.2504561873442, 950.071756306005, 939.24570807684, 957.1563025278213, 958.1312475244004, 913.8022988685859, 978.122306614396, 911.985195899648, 951.2113308436805]
 # episode_reward_mean 937.1786981086668
 # episode_reward_std 35.1068316846696
@@ -40,6 +27,12 @@ python decision-transformer/gym/dtagent.py
 # episode_reward_std 7.57430020195958
 # episode_length 1000.0
 
+```
+
+To train this DT model, we run the following command:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit True --noise -1 --save_model True
 ```
 
 Code Structure
@@ -134,6 +127,11 @@ pip install "transformers==4.36"
 unzip Project.zip project/collected_data/*
 mv project/collected_data/ .
 rm -r project
+
+
+cp -r collected_data collected_data_old
+python data_transform_.py
+
 ```
 
 ```bash
