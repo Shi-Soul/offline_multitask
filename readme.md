@@ -1,50 +1,76 @@
 
-## Overview & Planning
+# Offline Multi-task Reinforcement Learning| RL Course Project | SJTU AI3601
+
+## Introduction
+
+In [this repo](https://github.com/Shi-Soul/offline_multitask), we aim to solve the offline multi-task reinforcement learning problem. We use the walker2d environment from dm_control as the testbed, and use collected trajectories for walk and run tasks as the offline dataset. We need to train a RL model to solve both tasks. 
+
+We apply several algorithms, including naive imitation learning, CQL-SAC, TD3+BC, model-based method (naive model based method, MOReL), decision transformer and CDS (implemented in UTDS). We also compare the performance of these algorithms and analyze the results.
+
+We also write some codes for multi-processing parallel evaluation(see `util.py`) and policy visualization. We mainly use [wandb](https://wandb.ai/) to log the training process and results.
+
+We include our best Decision Transformer model as the final agent. The agent can be evaluated in the following way:
+
+```bash 
+# Please ensure the collected_data is set up properly, and the model_dt_best.pt is in the root dir.
+
+# To setup dataset, please:
+# First Get Project.zip (From project requirement) in this dir
+unzip Project.zip project/collected_data/*
+mv project/collected_data/ .
+rm -r project
+
+cp -r collected_data collected_data_old
+python data_transform_.py
+
+# Run evaluation
+ls model_dt_best.pt
+python decision-transformer/gym/dtagent.py
+
+# Evaluation Output should look like:
+
+# 100%|██████████████████████████████████████████████████████████████████████████████████████| 204/204 [00:00<00:00, 590.41it/s]
+# ########### Data Loaded! ###########
+# episode_reward [849.8103782379474, 962.2504561873442, 950.071756306005, 939.24570807684, 957.1563025278213, 958.1312475244004, 913.8022988685859, 978.122306614396, 911.985195899648, 951.2113308436805]
+# episode_reward_mean 937.1786981086668
+# episode_reward_std 35.1068316846696
+# episode_length 1000.0
+# episode_reward [250.60686935427643, 255.7014766754349, 259.8757880017744, 264.97924390853655, 254.45711360339502, 251.6547112105695, 254.6708868552152, 265.57952390932024, 272.8569586012661, 270.82264443394484]
+# episode_reward_mean 260.1205216553733
+# episode_reward_std 7.57430020195958
+# episode_length 1000.0
+
+```
+
+Code Structure
+- BC: `train_il.py`, `train_ilmb.py`
+- CQL: `tianshou_cql.py` (tianshou implementation), `train_cqlsac.py` (our implementation)
+- TD3BC: `tianshou_td3bc.py`
+- Decision Transformer: `decision-transformer/`
+- Model based methods: `train_mbmlp.py`, `train_mbvae.py`, `train_morel.py`, `train_ppomb.py`, `morel/`
+- UTDS & CDS: `UTDS/`
+- Tools code: `util.py`, `data_transform_.py`, `agent.py`, `dmc.py`, `eval.py`, `dmc2gym/`, `exp_scripts/`, ...
+
+Performance of each algorithm:
+
+|	| Walk| 	Run|
+|---|----|----|
+|Expert|	962.83|	318.37|
+| Random|	  51.86 +-   12.67|	  27.92 +-   3.45|
+|||
+|BC|	854.95 +- 207.23|	**308.08** +- 25.12|
+|TD3BC	|933.92 +- 102.27|	275.11 +- 69.71|
+|CQL|	934.74 +- 103.25|	291.66 +- 57.67|
+|DT|	**956.01** +-   15.34|	258.34 +-   4.34|
+|DT w noise|	939.86 +-   26.44|	277.53 +- 22.84|
+
+
+## Logging & Planning
 
 Baseline
 - Dataset Expert Performance: 
     - run (318.36557 251.48225), walk (962.8321 929.83185)   
 
-- Exp
-    - 每个setting 训3次, eval时取100个episodes, 需要保留最佳模型
-    - baseline: bc, random 
-    - 最佳方法: cql, td3+bc, dt, mb  
-    - 有task bit, 无task bit: 
-        - walk-> walk; run-> run; **walk+run->walk+run**
-    - add noise exp
-        - different noise magnitude
-        - 
-    - Dataset Exp
-        - Walk-> Walk; Run-> Run; Walk+Run -> Walk+Run
-        - Walk m-> walk, walk mr -> walk;
-        - run  m-> run , run  mr -> run;  
-        - // (walk m+ run m)
-
-
-
-
-
-| Method | walk(best) | run(best) |
-| -------- | -------- | -------- |
-| Expert Traj | 962.8321 | 318.36557 |
-| Random | 51.85748167535231 +- 12.673925499073189 | 27.921023864970184 +- 3.4484724900639914 |
-| BC   | (181.86798185904092, 44.01772755239101)  | (66.94229235058019, 14.862189258857475) |
-| ~~CQL(ours)~~   | 102   | 49   |
-| CQL(tianshou)   | 205.78   | 76.17   |
-| Dicision Tranformer | 229 | 75 |
-| TD3+BC(tianshou)   | 160   | ?   |
-| model base ppo | ? | ? |
-| morel | ? | ? |
-| ~~GAIL(tianshou)~~   | 160   | ?   |
-| ~~PPO(sb3,online)~~ | ? | ? |
-
-tianshou_cql results
-
-| dataset | walk(best) | run(best) | step per epoch | add task bit |
-| -------- | -------- | -------- | -------- | -------- |
-| all | 205.78 | 76.17 | 5000 | true |
-| all | 199.10 | 83.52 | 1000 | true |
-| all | 211.43 | 87.13 | 1000 | false |
 
 - (done) Implement  Naive Imitation Learning 
 - (done) Implement  CQL-SAC 
@@ -66,45 +92,14 @@ tianshou_cql results
     - Implemented MLP & VAE model.
     - (problem) how to use the model?
 - (done) Implement Decision Transformer
-- (working) comparison experiments
+- (done) comparison experiments
     - find best parameter for existing algorithms 
     - does more data help?
     - does adding noise help?
-- (working) interface
+- (done) interface
     - 需要把最佳模型包装起来, 做成agent_example能调用的形式
-    - remain: decision transformer
+    -  decision transformer
 
-
-## Experience Results
-
-### Whether to add task bit
-
-| Method | Taskbit | walk | run | walk(all) | run(all) |
-| -------- | -------- | -------- | --------  | --------  | --------    |
-| random | \\ | ? | ? | ? | ? |
-| bc | Yes | ? | ? | ? | ?
-| bc | No | ? | ? | ? | ?
-| cql | Yes  | ? | ? | ? | ? |
-| cql | No | ? | ? | ? | ? |
-
-
-
-
-### Whether to add noise
-
-| Method | noise | walk | run | walk(all) | run(all) |
-| -------- | -------- | -------- | --------  | --------  | --------    |
-| cql | 0  | ? | ? | ? | ? |
-| cql | 0.1 | ? | ? | ? | ? |
-
-### Different dataset
-
-| Method | walk | run | walk(all) | run(all) | walk m | walk mr | run m | run mr|
-| -------- | -------- | -------- | --------  | --------  | --------    |-------- | --------  | --------  |
-|  bc | ? | ? | ? | ? | ? | ? | ? |
-| cql | ? | ? | ? | ? | ? | ? | ? |
-
-<!-- | random | ? | ? | ? | ? | ? | ? | ? | -->
 
 ## Usage
 
@@ -131,7 +126,6 @@ pip install imageio #
 
 # for morel
 pip install comet_ml  #3.42.1
-
 pip install "transformers==4.36"
 ```
 
@@ -143,16 +137,17 @@ rm -r project
 ```
 
 ```bash
-# Run random policy and two algorithms
+# Run random policy and some algorithms
 python agent.py
-python train_il.py train
-python train_il.py test
 python train_il.py train --random_noise=-1 --ADD_TASK_BIT=True --USE_DATASET_STR="walk_m" --TEST_AFTER_TRAINING=True
+python tianshou_td3bc.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="walk_m,walk_mr" --task walk
+python tianshou_cql.py --random_noise=-1 --ADD_TASKBIT=True --USE_DATASET_STR="__all__" --task walk
+python decision-transformer/gym/experiment_dmc.py --USE_DATASET_STR __all__ --task_bit True --noise -1 --save_model True
 
-python train_cqlsac.py train
-python train_cqlsac.py test
+# python train_cqlsac.py train
+# python train_cqlsac.py test
 
-CUDA_VISIBLE_DEVICES=0 python train_morel.py --comet_api wye3SgI6S0uSJyf5Mc54R0DTr --exp_name v2_t3.2_n32
+python train_morel.py
 ```
 
 
@@ -174,3 +169,10 @@ https://github.com/tinkoff-ai/CORL/blob/main/algorithms/offline/cql.py
 
 https://github.com/thu-ml/tianshou/
 
+https://github.com/kzl/decision-transformer
+
+https://github.com/Baichenjia/UTDS
+
+https://github.com/denisyarats/dmc2gym
+
+https://github.com/SwapnilPande/MOReL

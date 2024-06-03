@@ -301,12 +301,12 @@ def vis(agent, task='walk', num_eval_episodes=10,rtg=0.8, name='none',enable=Tru
         rew_list.append(total_reward)
         total_reward = 0
         video_name = f'dt_{name}_{task}_{rtg}_{episode}.mp4'
-        if rew_list[-1] < 1000*rtg*0.5:
-            # fail
-            fail_cnt += 1
-            print("Fail case: ", video_name)
-        else:
-            video_name = f'dt_{name}_{task}_{rtg}__.mp4'
+        # if rew_list[-1] < 1000*rtg*0.5:
+        #     # fail
+        #     fail_cnt += 1
+        #     print("Fail case: ", video_name)
+        # else:
+        #     video_name = f'dt_{name}_{task}_{rtg}__.mp4'
             
         video_recorder.save(video_name)
         
@@ -314,7 +314,7 @@ def vis(agent, task='walk', num_eval_episodes=10,rtg=0.8, name='none',enable=Tru
     print('episode_reward_mean', np.mean(rew_list))
     print('episode_reward_std', np.std(rew_list) )
     print('episode_length', step / episode)
-    print("fail cnt: ", fail_cnt)
+    # print("fail cnt: ", fail_cnt)
 
 def main():
     device = 'cuda'
@@ -360,7 +360,8 @@ def main():
                 attn_pdrop=variant['dropout'],
             ).to(device)
     # dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/dt_exp/20240602-100555709/9.pt")
-    dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/_dt/9.pt")
+    dt_model.load("../../model_dt_best.pt")
+    # dt_model.load("/home/wjxie/wjxie/env/offline_multitask/ckpt/_dt/9.pt")
     
     dataset_file_paths = from_datasetstr_to_datasetfilepath(variant['USE_DATASET_STR'])
     trajectories = make_trajs(dataset_file_paths)
@@ -380,10 +381,10 @@ def main():
     #     print('rtg:', rtg)
     #     print(eval_agent(dt_agent, eval_episodes=10,seed=2,rtg=rtg))
     
-    vis(dt_agent,'walk', num_eval_episodes=400,rtg=0.999,name='baseline',enable=False)
+    vis(dt_agent,'walk', num_eval_episodes=10,rtg=0.999,name='baseline',enable=False)
     # vis(dt_agent,'walk', num_eval_episodes=400,rtg=0.999,name='noise',enable=False)
     
-    # vis(dt_agent,'run', num_eval_episodes=300,rtg=0.32,name='baseline',enable=False)
+    vis(dt_agent,'run', num_eval_episodes=10,rtg=0.32,name='baseline',enable=False)
     # vis(dt_agent,'run', num_eval_episodes=300,rtg=0.32,name='noise',enable=False)
     
     # walk: (rtg=0.999)
